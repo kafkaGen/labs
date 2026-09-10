@@ -1,1 +1,44 @@
+# Virtual environment — noise for AI context, open manually if needed.
+.venv/
+
+# Temporary files — noise for AI context, open manually if needed.
+tmp/
+
+# Local data — Distillery's own DB will hold real Topics/Sources/Findings/
+# Feedback (the user's actual personal data), not code the AI needs to read.
+*.db
+*.sqlite
+*.sqlite3
+
+# Secrets & credentials — Action Requests will need Calendar/Task OAuth
+# tokens; catch the common filenames before they ever land in a repo.
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+credentials.json
+service-account*.json
+token.json
+*.token
+.netrc
+.pypirc
+secrets/
+.secrets/
 .env
+
+# Generated / cache — large, regenerable, near-zero value as AI context.
+.ty_cache/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+__pycache__/
+htmlcov/
+build/
+dist/
+*.egg-info/
+.eggs/
+node_modules/
+
+# Auto-generated lockfile — noise for AI context, open manually if needed.
+uv.lock

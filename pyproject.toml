@@ -1,7 +1,53 @@
 [project]
 name = "labs"
 version = "0.1.0"
-description = "Add your description here"
+description = "Monorepo root: shared CI, Python lint config, agent setup, and context for the projects it hosts."
 readme = "README.md"
+authors = [
+    { name = "Oleh Borysevych", email = "borysevych.oleh87@gmail.com" }
+]
 requires-python = ">=3.12"
 dependencies = []
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.6.2",
+    "ruff>=0.16.7",
+    "ty>=0.0.80",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # Pyflakes
+    "I",    # isort (import sorting/grouping)
+    "N",    # pep8-naming (snake_case, PascalCase, ...)
+    "UP",   # pyupgrade (modern syntax: `list[str]`, `X | None`, ...)
+    "B",    # flake8-bugbear (likely bugs and design issues)
+    "S",    # flake8-bandit (security lint: no `eval`, no hardcoded secrets, ...)
+    "C4",   # flake8-comprehensions (unnecessary list/dict/set comprehensions)
+    "SIM",  # flake8-simplify (redundant conditionals, needless branches)
+    "PTH",  # flake8-use-pathlib (pathlib.Path over os.path)
+    "PLE",  # Pylint errors (near-zero false positives)
+    "PLW",  # Pylint warnings (global-statement, unused loop vars, ...)
+    "RUF",  # Ruff-specific (mutable class defaults, implicit Optional, ...)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["ALL"]
+"**/test_*.py" = ["ALL"]
+"**/conftest.py" = ["ALL"]
+
+[tool.ty.environment]
+python-version = "3.12"

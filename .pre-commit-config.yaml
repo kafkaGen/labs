@@ -1,0 +1,55 @@
+# Run `uv run pre-commit install` once per clone to activate these hooks,
+# and `uv run pre-commit autoupdate` periodically to bump the `rev` pins.
+repos:
+  # Ruff: lints and formats Python.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.6
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  # ty: type-checks Python, resolving deps straight from pyproject.toml.
+  - repo: https://github.com/astral-sh/ty-pre-commit
+    rev: v0.0.80
+    hooks:
+      - id: ty
+        args: [--isolated]
+
+  # pytest: no tests exist yet, so this hook is disabled (stages: [manual])
+  # rather than deleted. Once tests/ has real tests, drop `stages` below.
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: uv run pytest
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+
+  # Generic hygiene: whitespace, file endings, and config-file sanity checks.
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+      - id: debug-statements
+      - id: detect-private-key
+
+  # gitleaks: fast, dependency-free scan for committed secrets/credentials.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.28.0
+    hooks:
+      - id: gitleaks
+
+  # Keeps uv.lock in sync whenever pyproject.toml's dependencies change.
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.12.7
+    hooks:
+      - id: uv-lock

@@ -16,18 +16,6 @@ repos:
       - id: ty
         args: [--isolated]
 
-  # pytest: no tests exist yet, so this hook is disabled (stages: [manual])
-  # rather than deleted. Once tests/ has real tests, drop `stages` below.
-  - repo: local
-    hooks:
-      - id: pytest
-        name: pytest
-        entry: uv run pytest
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [manual]
-
   # Generic hygiene: whitespace, file endings, and config-file sanity checks.
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0

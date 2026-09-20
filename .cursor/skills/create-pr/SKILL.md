@@ -1,58 +1,71 @@
 ---
 name: create-pr
 description: >-
-  Create or update a GitHub pull request via GitHub MCP: inspect branch commits,
-  search and link related issues, write title and body, target main. Use when the
-  user asks to create, open, update, or refresh a PR or MR.
+  Create or update a GitHub pull request with the GitHub CLI: read branch
+  commits, write title and body, target main. Use when the user asks to create,
+  open, update, or refresh a PR or MR.
+disable-model-invocation: true
 ---
 
 # Create PR
 
-Use **GitHub MCP**, not `gh`. Inspect the GitHub namespace schema before calling. Never open a PR from `main`. If still on `main`, stop — git-commit creates the topic branch on first commit.
+Use **`gh`**, never GitHub MCP. Never open a PR from `main`. If still on `main`, stop — `/git-commit` creates the topic branch on first commit.
 
 **Safety:** never update git config, skip hooks, or force-push `main`.
 
+Before creating a PR, check whether one already exists for this branch. If it does, **update that PR** (title and body) instead of opening a second one. Don't ask; the existing PR is the one to keep current.
+
 ## Workflow
 
-1. **Inspect** — owner/repo from `git remote get-url origin`. Know every change on this branch:
+1. **Inspect the branch.** Know the current branch and every commit on it since it diverged from `main`. The commit messages are the source of truth for the PR: they already say what changed and why. Read all of them. Use the diff only to clarify a message that is ambiguous, never as the primary input.
 
 ```bash
 git status
 git fetch origin
+git branch --show-current
 git log --format='%h %s%n%b' origin/main..HEAD
+```
+
+If a commit message isn't enough, clarify with:
+
+```bash
 git diff origin/main...HEAD
 ```
 
-Fill the body template below from those commits. Do not look for a repo PR template.
+Fill the body template below from those commits. Do not look for a repo PR template. Do not dump file paths.
 
-2. **Existing PR** — `list_pull_requests` (`owner`, `repo`, `state: open`, `head: <owner>:<branch>`, `base: main`). If one exists, `update_pull_request` instead of create.
+2. **Check for an existing PR** on this branch against `main`:
 
-3. **Issues** — GitHub MCP:
+```bash
+gh pr view --json number,url,title
+```
 
-- `#N` in commits or chat → `issue_read` (`method: get`, `owner`, `repo`, `issue_number`)
-- else `search_issues` (`query` = short purpose from commits, `owner`, `repo`)
-- still nothing → `list_issues` (`owner`, `repo`, `state: OPEN`)
+No open PR for this branch: `gh` exits non-zero. Create in step 4. An open PR: update it in step 4. Never create a second PR for the same branch.
 
-If this PR finishes the work: `Closes #N` in the **PR body**. Related but unfinished: `Refs #N`. Else `None`. Do not close via `issue_write`.
+3. **Issue is optional.** Link one only when the user named it or a commit already has `Closes #N` / `Refs #N`. Do not search GitHub for a matching issue. Do not invent a link.
 
-4. **Create or update** — `base` is always `main`. Title: `type(scope): summary` (same as git-commit). **Always** pass `owner`, `repo`, `title`, `head`, `base`.
+If this PR finishes that work: `Closes #N` in the PR body. Related but unfinished: `Refs #N`. If nothing was named, omit the Issue section.
 
-`create_pull_request`: `owner`, `repo`, `title`, `head` (current branch), `base: main`, `body`.
+To confirm a named issue exists:
 
-`update_pull_request`: `owner`, `repo`, `pullNumber`, `title`, `body`.
+```bash
+gh issue view <N>
+```
 
-Push first if the branch is not on origin (`git push -u origin HEAD`). Return the PR URL.
+Do not close the issue with `gh issue close`. `Closes #N` in the body is enough.
 
-## PR body template
+4. **Push, then create or update.** `base` is always `main`. Title: `type(scope): summary` (same as `/git-commit`). Return the PR URL when done.
 
-```markdown
-## Title
-type(scope): short imperative summary
+Push if the branch is not on origin yet:
 
-## Issue
-Closes #123
-<!-- or Refs #123 / None -->
+```bash
+git push -u origin HEAD
+```
 
+**Create** (no existing PR):
+
+```bash
+gh pr create --base main --title "type(scope): summary" --body "$(cat <<'EOF'
 ## Proposal
 Why these changes were made: the problem or decision. Not how.
 
@@ -65,6 +78,39 @@ Why these changes were made: the problem or decision. Not how.
 
 ## Breaking changes
 None
+EOF
+)"
 ```
 
-Fill from the commit list. Do not dump file paths. Keep headings.
+Include an Issue section only when step 3 found one:
+
+```markdown
+## Issue
+Closes #123
+```
+
+**Update** (PR already exists). Refresh title and body from the current commit list so the PR still matches the branch:
+
+```bash
+gh pr edit <number> --title "type(scope): summary" --body "$(cat <<'EOF'
+## Proposal
+Why these changes were made: the problem or decision. Not how.
+
+## Changes
+- High-level change drawn from the branch commits
+- Second bounded change
+
+## Test plan
+- How a reviewer verifies this (commands or flows actually run)
+
+## Breaking changes
+None
+EOF
+)"
+```
+
+Then print the URL:
+
+```bash
+gh pr view --json url --jq .url
+```

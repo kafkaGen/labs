@@ -7,7 +7,7 @@ description: "You MUST use this before any creative work - creating features, bu
 
 Help turn ideas into fully formed designs and specs through natural collaborative dialogue.
 
-Start by understanding the current project context, then ask questions one at a time to refine the idea. Once you understand what you're building, present the design and get user approval.
+Start by understanding the current project context, then grill the idea until every branch of it is settled. Once you understand what you're building, present the design and get user approval.
 
 <HARD-GATE>
 Do NOT invoke any implementation skill, write any code, scaffold any project, or take any implementation action until you have presented a design and the user has approved it. This applies to EVERY project regardless of perceived simplicity.
@@ -23,34 +23,37 @@ You MUST create a task for each of these items and complete them in order:
 
 1. **Explore project context** — check files, docs, recent commits
 2. **Offer the visual companion just-in-time** — NOT upfront. The first time a question would genuinely be clearer shown than described, offer it then (its own message); on approval its browser tab opens for you. If no visual question ever arises, never offer it. See the Visual Companion section below.
-3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
+3. **Grill the idea** — **REQUIRED SUB-SKILL:** use `grilling`. Work the design tree in rounds until the frontier is empty: purpose, constraints, success criteria
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
 5. **Present design** — in sections scaled to their complexity, get user approval after each section
-6. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
-7. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
-8. **User reviews written spec** — ask user to review the spec file before proceeding
-9. **Transition to implementation** — invoke writing-plans skill to create implementation plan
+6. **Record the ADRs** — **REQUIRED SUB-SKILL:** use `writing-adrs`, before the design doc exists (see below)
+7. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
+8. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
+9. **User reviews written spec** — ask user to review the spec file before proceeding
+10. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
 ## Process Flow
 
 ```dot
 digraph brainstorming {
     "Explore project context" [shape=box];
-    "Ask clarifying questions" [shape=box];
+    "Grill the design tree\n(grilling)" [shape=box];
     "Propose 2-3 approaches" [shape=box];
     "Present design sections" [shape=box];
     "User approves design?" [shape=diamond];
+    "Propose ADR candidates\n(writing-adrs)" [shape=box];
     "Write design doc" [shape=box];
     "Spec self-review\n(fix inline)" [shape=box];
     "User reviews spec?" [shape=diamond];
     "Invoke writing-plans skill" [shape=doublecircle];
 
-    "Explore project context" -> "Ask clarifying questions";
-    "Ask clarifying questions" -> "Propose 2-3 approaches";
+    "Explore project context" -> "Grill the design tree\n(grilling)";
+    "Grill the design tree\n(grilling)" -> "Propose 2-3 approaches";
     "Propose 2-3 approaches" -> "Present design sections";
     "Present design sections" -> "User approves design?";
     "User approves design?" -> "Present design sections" [label="no, revise"];
-    "User approves design?" -> "Write design doc" [label="yes"];
+    "User approves design?" -> "Propose ADR candidates\n(writing-adrs)" [label="yes"];
+    "Propose ADR candidates\n(writing-adrs)" -> "Write design doc";
     "Write design doc" -> "Spec self-review\n(fix inline)";
     "Spec self-review\n(fix inline)" -> "User reviews spec?";
     "User reviews spec?" -> "Write design doc" [label="changes requested"];
@@ -58,7 +61,7 @@ digraph brainstorming {
 }
 ```
 
-**The terminal state is invoking writing-plans.** Do NOT invoke frontend-design, mcp-builder, or any other implementation skill. The ONLY skill you invoke after brainstorming is writing-plans.
+**The terminal state is invoking writing-plans.** Do NOT invoke frontend-design, mcp-builder, or any other implementation skill. The only skills this one invokes are its two required sub-skills, `grilling` and `writing-adrs`, and then writing-plans.
 
 ## The Process
 
@@ -67,10 +70,9 @@ digraph brainstorming {
 - Check out the current project state first (files, docs, recent commits)
 - Before asking detailed questions, assess scope: if the request describes multiple independent subsystems (e.g., "build a platform with chat, file storage, billing, and analytics"), flag this immediately. Don't spend questions refining details of a project that needs to be decomposed first.
 - If the project is too large for a single spec, help the user decompose into sub-projects: what are the independent pieces, how do they relate, what order should they be built? Then brainstorm the first sub-project through the normal design flow. Each sub-project gets its own spec → plan → implementation cycle.
-- For appropriately-scoped projects, ask questions one at a time to refine the idea
-- Prefer multiple choice questions when possible, but open-ended is fine too
-- Only one question per message - if a topic needs more exploration, break it into multiple questions
-- Focus on understanding: purpose, constraints, success criteria
+- For appropriately-scoped projects, **REQUIRED SUB-SKILL:** use `grilling`. It replaces asking clarifying questions by hand: map the idea as a design tree and ask each round's whole frontier in one `AskQuestion` call, with your own best guess first
+- Focus the tree on: purpose, constraints, success criteria
+- Facts are yours to find, decisions are the user's. Dispatch a subagent for anything you could look up, and never block the rest of the frontier on it
 
 **Exploring approaches:**
 
@@ -100,6 +102,15 @@ digraph brainstorming {
 - Don't propose unrelated refactoring. Stay focused on what serves the current goal.
 
 ## After the Design
+
+**Record the ADRs first:**
+The grill is what settles the decisions, so the reasoning behind them is never more recoverable than it is now. Do this before the spec exists, so the spec links records that are already on disk.
+
+- **REQUIRED SUB-SKILL:** use `writing-adrs`. Look back over the settled branches for answers that are hard to reverse and beat a live alternative.
+- Run it after the user approves the design, not the moment the frontier empties — approval is where the grill's shared understanding gets confirmed, and a revision during approval would otherwise be recorded as a decision.
+- It proposes the batch and waits for a yes. Most sessions yield none or one, and a session that yields none writes nothing.
+- A decision you made on your own is not an ADR. It is a line in the spec.
+- Cite the accepted records in the spec as ADR-NNNN, linked relatively.
 
 **Documentation:**
 
@@ -132,8 +143,8 @@ Wait for the user's response. If they request changes, make them and re-run the 
 
 ## Key Principles
 
-- **One question at a time** - Don't overwhelm with multiple questions
-- **Multiple choice preferred** - Easier to answer than open-ended when possible
+- **Grill in rounds** - Ask a round's whole frontier at once; a question that depends on an open answer waits for the next round
+- **Never hand over a blank field** - Every question carries your recommended answer first
 - **YAGNI ruthlessly** - Remove unnecessary features from all designs
 - **Explore alternatives** - Always propose 2-3 approaches before settling
 - **Incremental validation** - Present design, get approval before moving on

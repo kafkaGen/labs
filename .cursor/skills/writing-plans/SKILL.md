@@ -51,6 +51,16 @@ independently testable deliverable.
 - "Run the tests and make sure they pass" - step
 - "Commit" - step
 
+## Docs Check
+
+**Which docs could this plan make wrong?** Read the plan, not the codebase. You are not working out what the docs should say — the implementation decides that, and it hasn't happened yet.
+
+Name the docs the plan's scope could plausibly touch: `docs/architecture.md` when it changes the system's shape, a README when it changes how the thing is run or installed, whatever else the package keeps. "Could" is the bar. A maybe earns a task; a task that finds nothing to change costs a minute.
+
+For each one, **add a final task to the plan that checks the doc against what actually got built and updates it if it drifted.** For `docs/architecture.md`, the task says to use `writing-architecture` in update mode. Do not edit any doc now.
+
+If the plan could not touch a doc, say so in one line and move on.
+
 ## Plan Document Header
 
 **Every plan MUST start with this header:**
@@ -149,7 +159,9 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 
 **2. Placeholder scan:** Search your plan for red flags — any of the patterns from the "No Placeholders" section above. Fix them.
 
-**3. Type consistency:** Do the types, method signatures, and property names you used in later tasks match what you defined in earlier tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
+**3. Docs task:** Does every doc the Docs Check named have a task that checks it? If not, add it.
+
+**4. Type consistency:** Do the types, method signatures, and property names you used in later tasks match what you defined in earlier tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
 
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
 

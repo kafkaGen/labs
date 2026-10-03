@@ -5,7 +5,7 @@ import pytest
 from mcp import MCPError
 
 from tests.client.fakes import FakeClient, FakeFactory, make_prompt, make_tool
-from weather_agents.mcp_client import McpClientError, McpClientPool
+from weather_agents.mcp_client import ConfigError, McpClientError, McpClientPool
 from weather_agents.mcp_client.config import StdioServerConfig
 
 pytestmark = pytest.mark.anyio
@@ -121,3 +121,54 @@ async def test_entering_again_forgets_the_last_run():
     async with pool:
         assert pool.failures == {}
         assert pool.server_names == ["a", "b"]
+
+
+async def test_the_model_sees_every_open_servers_tools_under_a_prefixed_name():
+    tool_a = make_tool("one")
+    tool_a.description = "First tool."
+    a = FakeClient(tools=[tool_a, make_tool("two"), make_tool("three")])
+    b = FakeClient(tools=[make_tool("one")])
+    async with pool_with(a, b) as pool:
+        tools = await pool.list_all_tools()
+    assert [tool.name for tool in tools] == ["a__one", "a__two", "a__three", "b__one"]
+    assert tools[0].description == "First tool."
+    assert tools[0].input_schema == {"type": "object"}
+    assert tool_a.name == "one"
+
+
+async def test_a_server_that_failed_to_open_adds_no_tools():
+    a = FakeClient(tools=[make_tool("one")])
+    b = FakeClient(open_error=OSError(2, "No such file or directory"))
+    async with pool_with(a, b) as pool:
+        tools = await pool.list_all_tools()
+    assert [tool.name for tool in tools] == ["a__one"]
+
+
+async def test_a_prefixed_tool_name_goes_to_its_server_with_the_bare_name():
+    a, b = FakeClient(), FakeClient()
+    async with pool_with(a, b) as pool:
+        result = await pool.call_namespaced_tool("b__one__two", {"x": 1})
+    assert result is b.tool_result
+    assert b.calls == [("call_tool", ("one__two", {"x": 1}))]
+    assert a.calls == []
+
+
+async def test_a_prefixed_name_for_an_unknown_server_names_that_server():
+    async with pool_with(FakeClient(), FakeClient()) as pool:
+        with pytest.raises(McpClientError, match="no such server") as raised:
+            await pool.call_namespaced_tool("nowhere__one")
+    assert raised.value.server == "nowhere"
+
+
+@pytest.mark.parametrize("name", ["one", "a", "a__"])
+async def test_a_name_without_a_server_and_a_tool_is_an_error(name: str):
+    a = FakeClient()
+    async with pool_with(a, FakeClient()) as pool:
+        with pytest.raises(McpClientError, match="<server>__<tool>"):
+            await pool.call_namespaced_tool(name)
+    assert a.calls == []
+
+
+def test_a_server_name_that_holds_the_separator_is_a_config_error():
+    with pytest.raises(ConfigError, match="a__b"):
+        McpClientPool({"a__b": StdioServerConfig(command="x")})

@@ -67,7 +67,7 @@ tests/client/
 - A call to a server in `failures` raises that recorded error. A call to a name not in the file raises `McpClientError(name, "no such server")`.
 - If a session drops mid-run, calls to that server raise `McpClientError`. The other servers keep working.
 - On exit, the stack closes every open session.
-- The pool does not merge or prefix tool names across servers. The agent loop owns that.
+- For a model, the pool adds two methods (added after review). `list_all_tools()` returns every open server's tools as the SDK's `Tool`, with `name` changed to `<server>__<tool>` and `input_schema` left as the server's JSON Schema. `call_namespaced_tool(name, arguments)` splits the name at the first `__`, so a tool name may hold `__`. A server name may not, and the pool rejects one with `ConfigError` when it is built. A name with no server part or no tool part, or a server that is not open, raises `McpClientError`. The per-server methods stay as they are. The pool does not check provider limits on tool name length or characters.
 
 **Limit.** The SDK's `Client` runs a task group, so the same task must open and close the pool. That holds for tests and a plain `async with`. The Textual app will have to open and close it in one task.
 
@@ -94,4 +94,4 @@ PRD use case 4 lists a caller-supplied sampling and elicitation handlers criteri
 
 ## Out of scope
 
-Sampling, elicitation, log and progress handlers. HTTP entries and transport. `${VAR}` expansion. Merging or prefixing tool names across servers. Timeouts and retries. A CLI or terminal driver. Moving the live tests onto this client.
+Sampling, elicitation, log and progress handlers. HTTP entries and transport. `${VAR}` expansion. Timeouts and retries. A CLI or terminal driver. Moving the live tests onto this client.

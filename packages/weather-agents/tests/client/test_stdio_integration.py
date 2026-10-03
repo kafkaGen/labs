@@ -81,6 +81,21 @@ async def test_a_tool_error_comes_back_as_a_result_not_an_exception(tmp_path):
     assert "latitude" in content.text
 
 
+async def test_the_model_facing_names_round_trip_through_the_real_server(tmp_path):
+    with anyio.fail_after(TIME_LIMIT_SECONDS):
+        async with McpClientPool.from_file(write_config(tmp_path)) as pool:
+            tools = await pool.list_all_tools()
+            result = await pool.call_namespaced_tool(
+                "open-meteo__forecast", {"latitude": 95, "longitude": 0}
+            )
+    names = {tool.name for tool in tools}
+    assert len(tools) == 11
+    assert all(name.startswith("open-meteo__") for name in names)
+    assert "open-meteo__forecast" in names
+    assert all(tool.input_schema["type"] == "object" for tool in tools)
+    assert result.is_error
+
+
 async def test_servers_that_cannot_start_are_named_and_the_real_one_still_works():
     servers = {
         "ghost": StdioServerConfig(command="definitely-not-a-command-xyz"),

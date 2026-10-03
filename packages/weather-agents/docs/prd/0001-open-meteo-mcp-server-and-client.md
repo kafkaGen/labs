@@ -1,6 +1,6 @@
 # PRD: Open-Meteo MCP server and MCP client
 
-**Status:** Draft
+**Status:** Building
 **In one line:** An MCP server that gives agents Open-Meteo's data through tools, resources, and prompts, grown in two maturity levels up to the advanced protocol surface, plus a server-agnostic MCP client for the future agent loop.
 **Serves:** "an MCP server I wrote" from the goal in [`../vision.md`](../vision.md), and the in-scope lines on the three primitives, both transports, and the advanced protocol surface.
 

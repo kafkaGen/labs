@@ -7,7 +7,7 @@ help: ## Show this help message.
 test: ## Run the unit and server tests. No network.
 	uv run --package weather-agents --group dev pytest
 
-test-live: ## Run the live test against the real Open-Meteo API.
+test-live: ## Run the live tests: every tool, resource, and prompt against the real Open-Meteo API.
 	uv run --package weather-agents --group dev pytest -m live -o addopts=""
 
 inspect: ## Start the server over stdio with MCP Inspector attached. Needs npx.

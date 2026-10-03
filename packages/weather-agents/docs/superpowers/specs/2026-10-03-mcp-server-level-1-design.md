@@ -175,7 +175,7 @@ Both are `@mcp.prompt()` functions that return messages. The wording is written 
 | `tests/server/` stdio | Spawns `python -m weather_agents.server` over stdio, lists tools, resources, and prompts, reads the guide, and gets a prompt. | None. No tool is called. |
 | `tests/live/` | One `@pytest.mark.live` test spawns the stdio server and calls `geocode_search` and `forecast` for real. | Real Open-Meteo. |
 
-- `make test` runs everything except `live`. `make test-live` runs the live test.
+- `make test` runs everything except `live`. `make test-live` runs the live tests: every tool, resource, and prompt, through a real stdio server.
 - Builders are used instead of recorded files because the historical and climate cases need tens of thousands of rows. The live test catches drift between the builders and the real API.
 - Criteria worth naming: every tool has an `outputSchema` and returns structured content; the ensemble result has no `_member` column; climate with 6 places returns an error naming `places` and records no HTTP request; a 500 fixture on one call does not stop the next call.
 

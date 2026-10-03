@@ -65,7 +65,7 @@ flowchart LR
 | Component | Owns | Tech | Status |
 |---|---|---|---|
 | CLI process (`weather-agents chat`) | The chat session: runtime choice, MCP config choice, the on-screen transcript, the conversation's lifetime | Click, Textual, pydantic-settings | Planned |
-| MCP server | Open-Meteo's tools, resources, and prompts over MCP, and the only code that calls Open-Meteo | Official `mcp` SDK (`MCPServer`) ([ADR-0003](adr/0003-official-mcp-sdk-over-fastmcp.md)), httpx | Planned |
+| MCP server | Open-Meteo's tools, resources, and prompts over MCP, and the only code that calls Open-Meteo | Official `mcp` SDK (`MCPServer`) ([ADR-0003](adr/0003-official-mcp-sdk-over-fastmcp.md)), httpx | Built for level 1 over stdio: eleven tools, a guide and an endpoint-page resource with completion, and two prompts. Planned: the dossier, sampling, elicitation, progress and log notifications |
 | HTTP server process (`weather-agents serve`) | Running the MCP server on streamable HTTP at `127.0.0.1`, stateful or stateless by flag | Same package, `mcp.run(transport="streamable-http")` | Planned |
 | Claude Code binary | The Agent SDK's agent loop, its MCP client, and its subagent dispatch | Bundled in `claude-agent-sdk`, spawned per chat session | Planned |
 
@@ -80,7 +80,7 @@ Inside the CLI process, these modules hold the boundaries. They are enforced by 
 | `agent_loop` | The API runtime's loop: call the model, run tool calls, append results, repeat. Stops on `end_turn`, on the per-message USD cap, on the per-message deadline, or on an error. Depends on a tool-provider interface, not on MCP | Planned |
 | `mcp_client` | A weather-agnostic MCP client: opens one session per configured server from an `mcpServers` file, keeps it open for the chat, lists and calls tools, reads resources, gets prompts. Its sampling, elicitation, progress, and log handlers are injected by its caller | Planned |
 | `agents` | Orchestrator and specialist definitions: system prompts, tool allowlists, model. Read by both runtimes, so neither owns a prompt ([ADR-0001](adr/0001-two-agent-runtimes-over-one-tool-layer.md)) | Planned |
-| `server` | The MCP server. Split inside into an `openmeteo` layer that knows HTTP and response shapes and nothing about MCP, and the MCP tools, resources, and prompts built on it. Never imported by the CLI side | Planned |
+| `server` | The MCP server. Split inside into an `openmeteo` layer that knows HTTP and response shapes and nothing about MCP, and the MCP tools, resources, and prompts built on it. Never imported by the CLI side | Built |
 | `settings` | One pydantic-settings object: defaults in code, overridden by `.env` and the environment, then by Click flags for one run | Planned |
 
 Coupling the diagram does not show: the CLI and the server ship as one uv package, `weather-agents`, and share a release. Both runtimes and the sampling handler use the one `ANTHROPIC_API_KEY`.
@@ -167,7 +167,7 @@ The SDK runtime enforces the deadline itself, with an `asyncio` timeout that cal
 | `weather-agents chat` | CLI command | `--runtime api\|sdk`, `--mcp-config <file>`, overrides for model, USD cap, deadline. In-chat commands include clearing the conversation | Me | Planned |
 | `weather-agents serve` | CLI command | `--port`, `--stateless` | Me | Planned |
 | `mcp.stdio.json`, `mcp.http.json` | Config files | Claude Code's `mcpServers` format. The stdio file has `command` and `args`. The HTTP file has `type: "http"`, `url`, and `headers` with a `${WEATHER_MCP_TOKEN}` placeholder. Both runtimes read the same file unchanged | `mcp_client`, Claude Code binary | Planned |
-| MCP server surface | MCP | Tools, resources with a template and completion, and prompts, as listed in [`open-meteo-mcp-scope.md`](open-meteo-mcp-scope.md). Tools return structured content | Any MCP client | Planned |
+| MCP server surface | MCP | Tools, resources with a template and completion, and prompts, as listed in [`open-meteo-mcp-scope.md`](open-meteo-mcp-scope.md). Tools return structured content | Any MCP client | Built for level 1. Planned for level 2 |
 | `.env` | Environment | `ANTHROPIC_API_KEY`, `WEATHER_MCP_TOKEN`, and any setting overrides | `settings`, the `${...}` expansion in config files | Planned |
 
 ## Data stores
@@ -203,7 +203,7 @@ Nothing is deployed. Everything runs on my machine from the uv workspace.
 | Authentication and authorization | A static bearer token on the HTTP transport. The server rejects requests without it, and both clients send it from the expanded `headers`. stdio has none: whoever can spawn the process owns it | Planned |
 | Configuration and secrets | pydantic-settings reads defaults, then `.env` and the environment, then Click flags. MCP connection details live only in the two config files. Secrets live only in `.env` | Planned |
 | Logging and observability | MCP log and progress notifications render live in the chat (API runtime). The server's Python logging goes to `.logs/mcp-server.log`, never to stderr, because a stdio child's stderr would draw over the Textual screen. Each message shows its cost when it finishes | Planned |
-| Error handling and retries | No retries anywhere. Open-Meteo errors become tool error results. The loop turns a hit cap or deadline into a visible stop reason, not an exception | Planned |
+| Error handling and retries | No retries anywhere. Open-Meteo errors become tool error results, and each Open-Meteo call has a 30 second timeout. The loop turns a hit cap or deadline into a visible stop reason, not an exception | Built for the server. Planned for the loop |
 | Graceful degradation | When a session has no back channel (stateless HTTP, the 2026 protocol, or the Claude Code client), the server catches the failed sampling or elicitation request and takes the fallback path from the scope doc instead of erroring | Planned |
 
 ## Scale and reliability

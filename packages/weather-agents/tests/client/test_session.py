@@ -134,3 +134,22 @@ async def test_calling_before_the_session_is_open_is_an_error():
     session, _ = session_for(FakeClient())
     with pytest.raises(McpClientError, match="session is not open"):
         await session.list_tools()
+
+
+async def test_an_error_raised_in_the_body_comes_out_unwrapped_when_the_sdk_wraps_it():
+    client = FakeClient(wrap_exit_errors=True)
+    session, _ = session_for(client)
+    with pytest.raises(McpClientError) as caught:
+        async with session:
+            client.error = MCPError(-32000, "Connection closed")
+            await session.list_tools()
+    assert caught.value.server == "weather"
+    assert isinstance(caught.value.__cause__, MCPError)
+
+
+async def test_an_error_that_is_not_ours_stays_inside_the_group():
+    session, _ = session_for(FakeClient(wrap_exit_errors=True))
+    with pytest.raises(ExceptionGroup) as caught:
+        async with session:
+            raise ValueError("boom")
+    assert caught.value.exceptions[0].args == ("boom",)

@@ -100,7 +100,17 @@ class McpSession:
         tb: TracebackType | None,
     ) -> bool | None:
         self._client = None
-        return await self._stack.__aexit__(exc_type, exc, tb)
+        try:
+            return await self._stack.__aexit__(exc_type, exc, tb)
+        except ExceptionGroup as group:
+            # The SDK client runs a task group, which wraps whatever escapes the `async with`
+            # body. When the group holds only our own errors, hand the first one back as it was
+            # raised, so `except McpClientError` works around the `async with`.
+            ours, rest = group.split(McpClientError)
+            if ours is None or rest is not None:
+                raise
+            leaf = _root_cause(ours)
+            raise leaf from leaf.__cause__
 
     async def list_tools(self) -> list[Tool]:
         """List every tool, following pagination."""

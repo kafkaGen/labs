@@ -41,7 +41,8 @@ class FakeClient:
     """Serves canned lists in pages of `page_size`, and can fail on entry or on every call.
 
     `open_error` raises when the client is entered, like a spawn failure. Set `error` after
-    entering to simulate a session that drops.
+    entering to simulate a session that drops. With `wrap_exit_errors`, exit re-raises the
+    body's error inside an ExceptionGroup, like the SDK's task group.
     """
 
     def __init__(
@@ -53,6 +54,7 @@ class FakeClient:
         prompts: Sequence[Prompt] = (),
         page_size: int = 2,
         open_error: BaseException | None = None,
+        wrap_exit_errors: bool = False,
     ) -> None:
         self.tools = tools
         self.resources = resources
@@ -60,6 +62,7 @@ class FakeClient:
         self.prompts = prompts
         self.page_size = page_size
         self.open_error = open_error
+        self.wrap_exit_errors = wrap_exit_errors
         self.error: BaseException | None = None
         self.calls: list[tuple[str, object]] = []
         self.tool_result = CallToolResult(content=[TextContent(type="text", text="ok")])
@@ -79,6 +82,10 @@ class FakeClient:
         tb: TracebackType | None,
     ) -> None:
         self.closed = True
+        if self.wrap_exit_errors and exc is not None:
+            if not isinstance(exc, Exception):
+                raise exc
+            raise ExceptionGroup("unhandled errors in a TaskGroup", [exc])
 
     def _record(self, method: str, detail: object) -> None:
         self.calls.append((method, detail))

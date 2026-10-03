@@ -51,7 +51,8 @@ Dependencies: `mcp[cli]>=2,<3` and `httpx`. The SDK now uses `httpx2` internally
 
 ```python
 def create_server(
-    *, transport: httpx.AsyncBaseTransport | None = None,
+    *,
+    transport: httpx.AsyncBaseTransport | None = None,
     today: Callable[[], date] = date.today,
 ) -> MCPServer: ...
 ```
@@ -99,16 +100,17 @@ Defaults: forecast uses `temperature`, `precipitation`, `wind`, `weather_code`. 
 
 ```python
 class Table(BaseModel):
-    time: list[str]                       # ISO dates, months ("2024-03"), or years
+    time: list[str]  # ISO dates, months ("2024-03"), or years
     units: dict[str, str]
     columns: dict[str, list[float | int | None]]
-    weekday: list[str] | None = None      # "Saturday", ... on raw daily tables only
+    weekday: list[str] | None = None  # "Saturday", ... on raw daily tables only
+
 
 class WeatherResult(BaseModel):
-    location: Location                    # grid latitude, longitude, elevation, timezone
+    location: Location  # grid latitude, longitude, elevation, timezone
     kind: Literal["hourly", "daily", "monthly", "climatology", "yearly"]
     table: Table
-    notes: list[str] = []                 # caveats the model should repeat
+    notes: list[str] = []  # caveats the model should repeat
 ```
 
 Other result types: `PlaceList` and `Place` for geocoding, `ClimateResult(places: list[WeatherResult])`, and `ElevationResult(points: list[ElevationPoint])`. Each result type is a class with annotated fields, so the SDK builds its output schema.

@@ -1,7 +1,8 @@
 """Final check: every tool, resource, and prompt, through a real server and the real Open-Meteo.
 
-Run with `make test-live`. A tool, resource, or prompt added to the server without a case here
-fails `test_every_registered_*_has_a_live_case`.
+Run with `make test-live`. Each test runs once per transport in `TRANSPORTS` (see conftest.py),
+so the test id names the transport, such as `test_the_guide_is_served[stdio]`. A tool or prompt
+added to the server without a case here fails the `test_every_registered_*_has_a_live_case` tests.
 """
 
 import pytest

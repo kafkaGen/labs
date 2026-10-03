@@ -1,6 +1,9 @@
+from collections.abc import Awaitable, Callable
+
 import pytest
 from mcp import MCPError
-from mcp.types import CallToolResult, TextContent
+from mcp.types import CallToolResult, TextContent, Tool
+from pydantic import ValidationError
 
 from tests.client.fakes import (
     FakeClient,
@@ -17,6 +20,29 @@ from weather_agents.mcp_client.session import McpSession
 pytestmark = pytest.mark.anyio
 
 CONFIG = StdioServerConfig(command="fake", args=["--flag"], env={"K": "v"})
+
+
+def invalid_result_error() -> ValidationError:
+    try:
+        Tool.model_validate({})
+    except ValidationError as error:
+        return error
+    raise AssertionError("an empty Tool should not validate")
+
+
+# Each operation with the text its error message must name.
+OPERATIONS: dict[str, tuple[Callable[[McpSession], Awaitable[object]], str]] = {
+    "list_tools": (lambda session: session.list_tools(), "list_tools"),
+    "list_resources": (lambda session: session.list_resources(), "list_resources"),
+    "list_resource_templates": (
+        lambda session: session.list_resource_templates(),
+        "list_resource_templates",
+    ),
+    "list_prompts": (lambda session: session.list_prompts(), "list_prompts"),
+    "call_tool": (lambda session: session.call_tool("forecast", {}), "call_tool 'forecast'"),
+    "read_resource": (lambda session: session.read_resource("x://1"), "read_resource 'x://1'"),
+    "get_prompt": (lambda session: session.get_prompt("p1"), "get_prompt 'p1'"),
+}
 
 
 def session_for(client: FakeClient) -> tuple[McpSession, FakeFactory]:
@@ -102,6 +128,39 @@ async def test_a_protocol_error_names_the_server_and_the_operation():
         str(caught.value) == "MCP server 'weather': call_tool 'forecast' failed: Connection closed"
     )
     assert isinstance(caught.value.__cause__, MCPError)
+
+
+@pytest.mark.parametrize(
+    ("error", "detail"),
+    [
+        (MCPError(-32000, "Connection closed"), "Connection closed"),
+        (RuntimeError("no structured content"), "no structured content"),
+        (invalid_result_error(), "validation error"),
+    ],
+    ids=["mcp-error", "runtime-error", "validation-error"],
+)
+@pytest.mark.parametrize("method", list(OPERATIONS))
+async def test_every_sdk_failure_in_a_call_names_the_server(method, error, detail):
+    call, operation = OPERATIONS[method]
+    client = FakeClient()
+    session, _ = session_for(client)
+    async with session:
+        client.error = error
+        with pytest.raises(McpClientError) as caught:
+            await call(session)
+    assert caught.value.server == "weather"
+    assert operation in str(caught.value)
+    assert detail in str(caught.value)
+    assert caught.value.__cause__ is error
+
+
+async def test_a_bare_protocol_error_while_opening_names_the_server():
+    session, _ = session_for(FakeClient(open_error=MCPError(-32000, "Connection closed")))
+    with pytest.raises(McpClientError) as caught:
+        async with session:
+            pass
+    assert caught.value.server == "weather"
+    assert "could not connect: Connection closed" in str(caught.value)
 
 
 async def test_a_spawn_failure_names_the_server_and_the_command():

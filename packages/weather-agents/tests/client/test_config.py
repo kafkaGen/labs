@@ -90,3 +90,10 @@ def test_the_shipped_stdio_config_loads():
     assert list(servers) == ["open-meteo"]
     assert servers["open-meteo"].command == "uv"
     assert servers["open-meteo"].args[-2:] == ["-m", "weather_agents.server"]
+
+
+def test_a_file_that_is_not_utf8_is_a_config_error(tmp_path):
+    path = tmp_path / "mcp.json"
+    path.write_bytes(b"\xff\xfe\x00")
+    with pytest.raises(ConfigError, match="not valid UTF-8"):
+        load_config(path)

@@ -28,7 +28,9 @@ class McpClientPool:
     """A set of open MCP sessions, one per configured server.
 
     A server that fails to open is recorded in `failures` and the others still open, so one
-    broken server does not stop the chat. Open and close the pool in the same task.
+    broken server does not stop the chat. Open and close the pool in the same task. An exception
+    raised in the `async with` body that is not a `McpClientError` leaves the pool wrapped in one
+    `ExceptionGroup` per open server, because the SDK client runs a task group.
 
     Tool names are not merged or prefixed across servers. Every call names its server, and the
     agent loop decides how to present tools to the model.
@@ -65,6 +67,8 @@ class McpClientPool:
         return list(self._sessions)
 
     async def __aenter__(self) -> Self:
+        self._sessions.clear()
+        self.failures.clear()
         async with AsyncExitStack() as stack:
             for name, config in self._servers.items():
                 session = McpSession(name, config, client_factory=self._client_factory)

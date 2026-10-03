@@ -18,6 +18,25 @@ TIME_LIMIT_SECONDS = 30
 
 REAL_SERVER = StdioServerConfig(command=sys.executable, args=["-m", "weather_agents.server"])
 
+# A child that answers `initialize`, then exits on the next request, like a server that crashes.
+DIER_SCRIPT = """
+import json, os, sys
+for line in sys.stdin:
+    message = json.loads(line)
+    if "id" not in message:
+        continue
+    if message["method"] != "initialize":
+        os._exit(0)
+    result = {
+        "protocolVersion": message["params"]["protocolVersion"],
+        "capabilities": {"tools": {}},
+        "serverInfo": {"name": "dier", "version": "0"},
+    }
+    reply = {"jsonrpc": "2.0", "id": message["id"], "result": result}
+    sys.stdout.write(json.dumps(reply) + "\\n")
+    sys.stdout.flush()
+"""
+
 
 def write_config(tmp_path: Path) -> Path:
     path = tmp_path / "mcp.json"
@@ -86,3 +105,19 @@ async def test_a_protocol_error_inside_the_pool_body_surfaces_as_mcp_client_erro
                 await pool.read_resource("open-meteo", "open-meteo://endpoints/nope")
     assert caught.value.server == "open-meteo"
     assert "read_resource" in str(caught.value)
+
+
+async def test_a_server_that_dies_mid_session_is_named_and_the_others_keep_working():
+    servers = {
+        "dier": StdioServerConfig(command=sys.executable, args=["-c", DIER_SCRIPT]),
+        "open-meteo": REAL_SERVER,
+    }
+    with anyio.fail_after(TIME_LIMIT_SECONDS):
+        async with McpClientPool(servers) as pool:
+            assert pool.failures == {}
+            for _ in range(2):
+                with pytest.raises(McpClientError) as caught:
+                    await pool.list_tools("dier")
+                assert caught.value.server == "dier"
+                assert "Connection closed" in str(caught.value)
+            assert len(await pool.list_tools("open-meteo")) == 11

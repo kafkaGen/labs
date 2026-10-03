@@ -40,9 +40,11 @@ def load_config(path: Path) -> dict[str, StdioServerConfig]:
             fails, because this is a mistake in the file and not a server that is down.
     """
     try:
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
     except OSError as error:
         raise ConfigError(f"cannot read {path}: {error.strerror or error}") from error
+    except UnicodeDecodeError as error:
+        raise ConfigError(f"{path} is not valid UTF-8: {error}") from error
     try:
         raw = json.loads(text)
     except json.JSONDecodeError as error:

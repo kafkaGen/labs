@@ -108,3 +108,16 @@ async def test_from_file_opens_the_servers_in_the_file(tmp_path: Path):
     pool = McpClientPool.from_file(path, client_factory=FakeFactory({"a": client}))
     async with pool:
         assert [tool.name for tool in await pool.list_tools("a")] == ["from_a"]
+
+
+async def test_entering_again_forgets_the_last_run():
+    a = FakeClient()
+    b = FakeClient(open_error=OSError(2, "No such file or directory"))
+    pool = pool_with(a, b)
+    async with pool:
+        assert set(pool.failures) == {"b"}
+        assert pool.server_names == ["a"]
+    b.open_error = None
+    async with pool:
+        assert pool.failures == {}
+        assert pool.server_names == ["a", "b"]

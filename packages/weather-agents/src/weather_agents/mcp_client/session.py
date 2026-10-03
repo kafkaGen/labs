@@ -19,6 +19,7 @@ from mcp.types import (
     ResourceTemplate,
     Tool,
 )
+from pydantic import ValidationError
 
 from weather_agents.mcp_client.config import StdioServerConfig
 from weather_agents.mcp_client.errors import McpClientError
@@ -89,7 +90,7 @@ class McpSession:
             self._client = await self._stack.enter_async_context(
                 self._client_factory(params, mode="legacy")
             )
-        except (OSError, ExceptionGroup) as error:
+        except (OSError, MCPError, ExceptionGroup) as error:
             raise McpClientError(self.name, _open_failure(error, self._config.command)) from error
         return self
 
@@ -191,8 +192,11 @@ class McpSession:
     def _named(self, operation: str) -> Iterator[None]:
         try:
             yield
-        except MCPError as error:
-            raise McpClientError(self.name, f"{operation} failed: {error.message}") from error
+        except (MCPError, RuntimeError, ValidationError) as error:
+            # The SDK raises RuntimeError for a result that misses or breaks the tool's output
+            # schema, and ValidationError for a result that breaks the protocol.
+            detail = error.message if isinstance(error, MCPError) else str(error)
+            raise McpClientError(self.name, f"{operation} failed: {detail}") from error
 
     async def _collect[T](
         self,
@@ -210,7 +214,8 @@ class McpSession:
 
 
 def _root_cause(error: BaseException) -> BaseException:
-    # Entering the SDK client wraps its failure in nested ExceptionGroups. Take the first leaf.
+    # The SDK client's task group wraps failures in nested ExceptionGroups, on entering and on
+    # leaving. Take the first leaf.
     while isinstance(error, BaseExceptionGroup):
         error = error.exceptions[0]
     return error

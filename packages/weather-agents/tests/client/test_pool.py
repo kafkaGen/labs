@@ -45,8 +45,12 @@ async def test_the_other_routed_methods_reach_the_named_server():
 
 async def test_servers_open_in_file_order_and_close_on_exit():
     a, b = FakeClient(), FakeClient()
-    async with pool_with(a, b) as pool:
-        assert pool.server_names == ["a", "b"]
+    pool = McpClientPool(
+        {"b": StdioServerConfig(command="b"), "a": StdioServerConfig(command="a")},
+        client_factory=FakeFactory({"a": a, "b": b}),
+    )
+    async with pool:
+        assert pool.server_names == ["b", "a"]
         assert pool.failures == {}
         assert not a.closed
         assert not b.closed
@@ -81,6 +85,18 @@ async def test_a_dropped_session_fails_its_calls_and_leaves_the_other_server_wor
         with pytest.raises(McpClientError, match="'a'.*Connection closed"):
             await pool.list_tools("a")
         assert [tool.name for tool in await pool.list_tools("b")] == ["from_b"]
+    assert a.closed
+    assert b.closed
+
+
+async def test_an_error_raised_in_the_body_comes_out_unwrapped_through_every_session():
+    a = FakeClient(wrap_exit_errors=True)
+    b = FakeClient(wrap_exit_errors=True)
+    with pytest.raises(McpClientError) as caught:
+        async with pool_with(a, b):
+            raise McpClientError("a", "boom")
+    assert caught.value.server == "a"
+    assert str(caught.value) == "MCP server 'a': boom"
     assert a.closed
     assert b.closed
 

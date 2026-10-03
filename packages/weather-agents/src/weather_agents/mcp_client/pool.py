@@ -86,28 +86,91 @@ class McpClientPool:
         return await self._stack.__aexit__(exc_type, exc, tb)
 
     async def list_tools(self, server: str) -> list[Tool]:
+        """List every tool on one server.
+
+        Args:
+            server: The server's name in the `mcpServers` file.
+
+        Raises:
+            McpClientError: The server is unknown, failed to open, or the call failed.
+        """
         return await self._session(server).list_tools()
 
     async def list_resources(self, server: str) -> list[Resource]:
+        """List every resource on one server.
+
+        Args:
+            server: The server's name in the `mcpServers` file.
+
+        Raises:
+            McpClientError: The server is unknown, failed to open, or the call failed.
+        """
         return await self._session(server).list_resources()
 
     async def list_resource_templates(self, server: str) -> list[ResourceTemplate]:
+        """List every resource template on one server.
+
+        Args:
+            server: The server's name in the `mcpServers` file.
+
+        Raises:
+            McpClientError: The server is unknown, failed to open, or the call failed.
+        """
         return await self._session(server).list_resource_templates()
 
     async def list_prompts(self, server: str) -> list[Prompt]:
+        """List every prompt on one server.
+
+        Args:
+            server: The server's name in the `mcpServers` file.
+
+        Raises:
+            McpClientError: The server is unknown, failed to open, or the call failed.
+        """
         return await self._session(server).list_prompts()
 
     async def call_tool(
         self, server: str, name: str, arguments: dict[str, object] | None = None
     ) -> CallToolResult:
+        """Call a tool on one server.
+
+        A result with `is_error=True` is a normal return, not an exception.
+
+        Args:
+            server: The server's name in the `mcpServers` file.
+            name: The tool name on that server.
+            arguments: Optional JSON arguments for the tool.
+
+        Raises:
+            McpClientError: The server is unknown, failed to open, or the call failed.
+        """
         return await self._session(server).call_tool(name, arguments)
 
     async def read_resource(self, server: str, uri: str) -> ReadResourceResult:
+        """Read a resource on one server.
+
+        Args:
+            server: The server's name in the `mcpServers` file.
+            uri: The resource URI.
+
+        Raises:
+            McpClientError: The server is unknown, failed to open, or the call failed.
+        """
         return await self._session(server).read_resource(uri)
 
     async def get_prompt(
         self, server: str, name: str, arguments: dict[str, str] | None = None
     ) -> GetPromptResult:
+        """Fetch a prompt on one server.
+
+        Args:
+            server: The server's name in the `mcpServers` file.
+            name: The prompt name on that server.
+            arguments: Optional prompt arguments.
+
+        Raises:
+            McpClientError: The server is unknown, failed to open, or the call failed.
+        """
         return await self._session(server).get_prompt(name, arguments)
 
     def _session(self, server: str) -> McpSession:

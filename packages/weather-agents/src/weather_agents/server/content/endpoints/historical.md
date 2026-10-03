@@ -2,7 +2,7 @@
 
 ## What it answers
 
-What the weather was at a point, for any period since 1940. Time horizon: 1940-01-01 up to about 5 days before today.
+What the weather was at a point, for any period since 1940. Time horizon: 1940-01-01 up to today. The newest days can be empty.
 
 Source: https://open-meteo.com/en/docs/historical-weather-api
 
@@ -14,8 +14,8 @@ Source: https://open-meteo.com/en/docs/historical-weather-api
 
 ## Trust and limits
 
-- ERA5 is delivered with a 5-day delay, so the last days can be missing.
-- Different models carry different variables. For example, ERA5-Land has no precipitation, solar radiation, or wind.
+- ERA5 is delivered with a 5-day delay. The default blend also uses ECMWF IFS, so the newest days often have data. When they do not, the tool leaves those days out and says how many.
+- Different models carry different variables, so a request tied to one model can come back with empty columns.
 - This server summarises long spans: up to 31 days one row per day, up to 2 years one row per month, and longer 12 rows with the average of each calendar month.
 
 Source: https://open-meteo.com/en/docs/historical-weather-api

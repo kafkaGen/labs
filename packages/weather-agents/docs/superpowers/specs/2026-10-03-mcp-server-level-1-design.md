@@ -45,7 +45,7 @@ tests/
 
 Dependencies: `mcp[cli]>=2,<3` and `httpx`. The SDK now uses `httpx2` internally, so `httpx` is our own dependency. Dev: `pytest`. The SDK's `anyio` plugin runs async tests, so there is no `pytest-asyncio`.
 
-`openmeteo/` imports nothing from `mcp`. `tools.py` is the only place that turns an `OpenMeteoError` into a `ToolError`.
+`openmeteo/` imports nothing from `mcp`. `tools/common.py` is the only place that turns an `OpenMeteoError` into a `ToolError`.
 
 ## Server assembly
 
@@ -119,7 +119,7 @@ Other result types: `PlaceList` and `Place` for geocoding, `ClimateResult(places
 
 - **ensemble.** Requests daily variables for `ecmwf_ifs025` (51 members). Open-Meteo returns each member as its own key (`temperature_2m_max`, `temperature_2m_max_member01`, and so on). The server computes the mean and the population standard deviation across all keys with that prefix, per day. The result has columns `<name>_mean` and `<name>_std` and never the members.
 - **seasonal.** Requests `monthly=temperature_2m_anomaly,precipitation_anomaly` (checked live on 2026-10-03: anomalies in K and mm, one row per month) with `forecast_days = min(months * 31, 216)`, then keeps the first `months` rows. A fixed low-confidence sentence goes in `notes`.
-- **historical.** `start_date >= 1940-01-01`, `end_date <= today`, `start_date <= end_date`. The span decides the shape: up to 31 days returns daily rows; up to 730 days returns monthly rows; longer returns a 12-row climatology (mean per calendar month across the years, with the year count in `notes`). Precipitation sums within a month. Every other variable averages. The last 5 days may be null because ERA5 lags, and the description says so. Partial months at either end are averaged as they are, and `notes` says that.
+- **historical.** `start_date >= 1940-01-01`, `end_date <= today`, `start_date <= end_date`. The span decides the shape: up to 31 days returns daily rows; up to 730 days returns monthly rows; longer returns a 12-row climatology (mean per calendar month across the years, with the year count in `notes`). Precipitation sums within a month. Every other variable averages. The newest days can be null, since ERA5 lags about 5 days and the default blend only sometimes fills them. Trailing all-null rows are left out and `notes` gives the count. Partial months at either end are averaged as they are, and `notes` says that.
 - **climate.** Requests all 7 models for `temperature_2m_mean`, `precipitation_sum`, and `wind_speed_10m_max`. Per model it computes yearly values (mean, sum, mean). Across models it returns `<name>_mean`, `<name>_min`, and `<name>_max`, skipping models that lack the variable. Requires `1950 <= start_year <= end_year <= 2049`. Always sends coordinates as lists and normalises the single-object reply to a list.
 - **marine.** Requests hourly waves, swell, ocean current, sea surface temperature, and sea level height, rolled up to daily rows (max for waves, swell, current, and sea level; mean for temperature). If every value is null, the point is inland: the result has an empty table and a note saying so. It is not an error.
 - **air_quality.** Requests hourly `pm10`, `pm2_5`, `ozone`, `nitrogen_dioxide`, `european_aqi`, `us_aqi`, and four pollen types, rolled up to daily maximums. All-null columns are dropped, with a note naming them.
@@ -163,7 +163,7 @@ Both are `@mcp.prompt()` functions that return messages. The wording is written 
 - **`compare_places`** (`places`, `month`; both strings).
   - Validation, raising `MCPError(INVALID_PARAMS, "Invalid argument 'places': ...")`: more than 5 comma-separated names, or an empty list; `month` that is not 1 to 12 or an English month name, in full or in three letters.
   - Messages: split `places` on commas; for each, call `geocode_search`, then `historical` for 1991-01-01 to 2020-12-31 and read the row for the month (the tool returns a 12-row climatology for that span); if the month starts within 7 months of the date given in the message, also call `seasonal` and label that part low-confidence; answer which place suits the trip best.
-  - The prompt embeds today's date from the server clock, because the model has no other way to know whether the month is within 7 months.
+  - The prompt embeds a `seasonal_months` value computed from the server clock, which says whether and how far `seasonal` reaches for the chosen month. The model does no date math. `seasonal` leaves out trailing months the API has no data for, and `notes` says so.
 
 ## Tests
 
@@ -187,6 +187,7 @@ These come from the research for this spec. The scope doc itself is not edited h
 - **Climate ends at 2049, not 2050.** Open-Meteo's data ends on 2050-01-01, so 2049 is the last full year.
 - **Ensemble spread is the standard deviation.** The scope doc says only "spread".
 - **Daily tables carry a `weekday` list.** Models get date math wrong, and the weekend check needs the Saturday and Sunday rows. Added to raw daily tables only.
+- **`forecast` has no `past_days`.** The scope doc routes "the last 14 days against normal" to `forecast` with `past_days`. The tool leaves it out (YAGNI), and `historical` covers past days. The guide says so.
 - **Guide content drops two claims.** "Routes" and "live observations" are not backed by any Open-Meteo page, so the guide's "cannot answer" section lists only what the docs and the API responses show.
 
 ## Checked before the plan

@@ -4,6 +4,7 @@ from weather_agents.server.openmeteo.tables import (
     climate_yearly,
     climatology,
     drop_empty,
+    drop_empty_tail,
     ensemble_stats,
     head,
     rollup,
@@ -135,3 +136,22 @@ def test_climate_yearly_summarises_models_per_year_and_skips_missing_models():
     assert result.columns["p_mean"] == [2.0, 2.0]
     assert result.units["t_mean"] == "°C"
     assert result.units["p_max"] == "mm"
+
+
+def test_drop_empty_tail_removes_only_trailing_rows_that_are_null_in_every_column():
+    table = Table(
+        time=["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"],
+        units={"a": "u", "b": "u"},
+        columns={"a": [1.0, None, None, None], "b": [2.0, 3.0, None, None]},
+        weekday=["Thursday", "Friday", "Saturday", "Sunday"],
+    )
+    trimmed, removed = drop_empty_tail(table)
+    assert removed == 2
+    assert trimmed.time == ["2026-10-01", "2026-10-02"]
+    assert trimmed.columns == {"a": [1.0, None], "b": [2.0, 3.0]}
+    assert trimmed.weekday == ["Thursday", "Friday"]
+
+
+def test_drop_empty_tail_leaves_a_complete_table_alone():
+    table = Table(time=["2026-10-01"], units={"a": "u"}, columns={"a": [1.0]})
+    assert drop_empty_tail(table) == (table, 0)

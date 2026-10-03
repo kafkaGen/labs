@@ -16,17 +16,28 @@ Open-Meteo serves weather data over HTTP. This server wraps 10 of its endpoints 
 - **Geocoding:** GeoNames.
 
 Source: https://open-meteo.com/en/docs
+Source: https://open-meteo.com/en/docs/ensemble-api
+Source: https://open-meteo.com/en/docs/seasonal-forecast-api
+Source: https://open-meteo.com/en/docs/historical-weather-api
+Source: https://open-meteo.com/en/docs/climate-api
+Source: https://open-meteo.com/en/docs/marine-weather-api
+Source: https://open-meteo.com/en/docs/air-quality-api
+Source: https://open-meteo.com/en/docs/flood-api
+Source: https://open-meteo.com/en/docs/elevation-api
+Source: https://open-meteo.com/en/docs/geocoding-api
 
 ## Refresh and trust
 
 - Every endpoint answers from a model grid, so a result describes a grid cell and not the exact point. The response gives the grid cell's own latitude and longitude.
-- Historical weather from ERA5 lags real time by about 5 days.
+- ERA5 and ERA5-Land lag real time by about 5 days. The default historical blend also draws on ECMWF IFS, so the newest days often have data anyway.
 - EC46 seasonal data updates daily at about 20:30 UTC. SEAS5 updates monthly, on the 5th.
 - Seasonal data is not bias-corrected. It is a tendency against normal and not a forecast for a day.
 - An ensemble shows how sure a forecast is. When the members agree, the forecast is firm. When they spread, it is not.
 - Refresh cadence and limits differ per endpoint. The endpoint guides list them.
 
 Source: https://open-meteo.com/en/docs/historical-weather-api
+Source: https://open-meteo.com/en/docs/seasonal-forecast-api
+Source: https://open-meteo.com/en/docs/ensemble-api
 
 ## Shared API conventions
 
@@ -46,13 +57,17 @@ Source: https://open-meteo.com/en/docs
 | Weather in the next days | forecast | Today to 16 days |
 | How sure is that forecast | ensemble | Within 15 days |
 | Tendency beyond two weeks | seasonal | 16 days to 7 months |
-| What the weather was | historical | 1940 to about 5 days ago |
+| What the weather was | historical | 1940 to today. The newest days can be empty |
 | Long-term change | climate | 1950 to 2050 |
 | Sea, air, rivers, terrain | marine, air-quality, flood, elevation | See each guide |
 
 A forecast plus the ensemble spread for the same days tells you both the expected weather and how far to trust it. Historical weather over 30 years gives the normal that a forecast or seasonal anomaly is measured against.
 
+Source: https://open-meteo.com/en/docs
 Source: https://open-meteo.com/en/docs/ensemble-api
+Source: https://open-meteo.com/en/docs/seasonal-forecast-api
+Source: https://open-meteo.com/en/docs/historical-weather-api
+Source: https://open-meteo.com/en/docs/climate-api
 
 ## What Open-Meteo cannot answer
 
@@ -62,6 +77,9 @@ Source: https://open-meteo.com/en/docs/ensemble-api
 - Seasonal data is not a day-by-day forecast.
 
 Source: https://open-meteo.com/en/docs/flood-api
+Source: https://open-meteo.com/en/docs/marine-weather-api
+Source: https://open-meteo.com/en/docs/air-quality-api
+Source: https://open-meteo.com/en/docs/seasonal-forecast-api
 
 ## Attribution and terms
 

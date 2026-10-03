@@ -95,7 +95,7 @@ and not a forecast for specific days.
 def parse_month(value: str) -> int:
     """Accept 1 to 12 or an English month name, in full or in three letters."""
     text = value.strip().lower()
-    if text.isdigit() and 1 <= int(text) <= 12:
+    if text.isascii() and text.isdigit() and 1 <= int(text) <= 12:
         return int(text)
     for number, name in enumerate(MONTHS, start=1):
         if text in (name.lower(), name[:3].lower()):

@@ -95,6 +95,24 @@ def head(table: Table, rows: int) -> Table:
     )
 
 
+def drop_empty_tail(table: Table) -> tuple[Table, int]:
+    """Remove the last rows in which every column is null. Returns the new table and the count.
+
+    Open-Meteo pads a requested range with null rows where it has no data yet.
+    """
+    keep = len(table.time)
+    while keep > 0 and all(values[keep - 1] is None for values in table.columns.values()):
+        keep -= 1
+    if keep == len(table.time):
+        return table, 0
+    return Table(
+        time=table.time[:keep],
+        units=table.units,
+        columns={name: values[:keep] for name, values in table.columns.items()},
+        weekday=table.weekday[:keep] if table.weekday else None,
+    ), len(table.time) - keep
+
+
 def drop_empty(table: Table) -> tuple[Table, list[str]]:
     """Remove columns that hold only nulls. Returns the new table and the removed names."""
     empty = [name for name, values in table.columns.items() if all(v is None for v in values)]

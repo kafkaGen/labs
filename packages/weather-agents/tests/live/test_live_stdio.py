@@ -15,19 +15,40 @@ BERLIN = {"latitude": 52.52, "longitude": 13.41}
 NORTH_SEA = {"latitude": 54.5, "longitude": 6.0}
 RHINE_AT_COLOGNE = {"latitude": 50.94, "longitude": 6.96}
 
-TOOL_CASES = {
-    "geocode_search": {"name": "Berlin", "country_code": "DE"},
-    "geocode_get": {"id": 2950159},
-    "forecast": {**BERLIN, "days": 3},
-    "ensemble": {**BERLIN, "days": 3},
-    "seasonal": {**BERLIN, "months": 2},
-    "historical": {**BERLIN, "start_date": "2024-01-01", "end_date": "2024-01-10"},
-    "climate": {"places": [BERLIN], "start_year": 2030, "end_year": 2032},
-    "marine": {**NORTH_SEA, "days": 2},
-    "air_quality": {**BERLIN, "days": 2},
-    "flood": {**RHINE_AT_COLOGNE, "days": 5},
-    "elevation": {"points": [BERLIN]},
-}
+# (tool, arguments, id). A tool may appear more than once, for each branch of its summary.
+TOOL_CASES = [
+    ("geocode_search", {"name": "Berlin", "country_code": "DE"}, "geocode_search"),
+    ("geocode_get", {"id": 2950159}, "geocode_get"),
+    ("forecast", {**BERLIN, "days": 3}, "forecast"),
+    ("ensemble", {**BERLIN, "days": 3}, "ensemble"),
+    ("seasonal", {**BERLIN, "months": 2}, "seasonal"),
+    ("seasonal", {**BERLIN, "months": 7}, "seasonal_seven_months"),
+    (
+        "historical",
+        {**BERLIN, "start_date": "2024-01-01", "end_date": "2024-01-10"},
+        "historical_daily",
+    ),
+    (
+        "historical",
+        {**BERLIN, "start_date": "2023-01-01", "end_date": "2024-06-30"},
+        "historical_monthly",
+    ),
+    (
+        "historical",
+        {**BERLIN, "start_date": "1991-01-01", "end_date": "2020-12-31"},
+        "historical_normals",
+    ),
+    ("climate", {"places": [BERLIN], "start_year": 2030, "end_year": 2032}, "climate"),
+    (
+        "climate",
+        {"places": [BERLIN, NORTH_SEA], "start_year": 2030, "end_year": 2031},
+        "climate_two_places",
+    ),
+    ("marine", {**NORTH_SEA, "days": 2}, "marine"),
+    ("air_quality", {**BERLIN, "days": 2}, "air_quality"),
+    ("flood", {**RHINE_AT_COLOGNE, "days": 5}, "flood"),
+    ("elevation", {"points": [BERLIN]}, "elevation"),
+]
 
 PROMPT_CASES = {
     "weekend_check": {},
@@ -52,16 +73,18 @@ def assert_has_data(data: dict) -> None:
         assert data["name"] == "Berlin"
 
 
-@pytest.mark.parametrize("tool", TOOL_CASES)
-async def test_the_tool_answers_with_real_data(live_client, tool):
-    result = await live_client.call_tool(tool, TOOL_CASES[tool])
+@pytest.mark.parametrize(
+    ("tool", "arguments"), [case[:2] for case in TOOL_CASES], ids=[case[2] for case in TOOL_CASES]
+)
+async def test_the_tool_answers_with_real_data(live_client, tool, arguments):
+    result = await live_client.call_tool(tool, arguments)
     assert not result.is_error, result.content
     assert_has_data(result.structured_content)
 
 
 async def test_every_registered_tool_has_a_live_case(live_client):
     registered = {tool.name for tool in (await live_client.list_tools()).tools}
-    assert registered == set(TOOL_CASES)
+    assert registered == {tool for tool, _, _ in TOOL_CASES}
 
 
 async def test_the_guide_is_served(live_client):

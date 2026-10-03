@@ -128,6 +128,23 @@ async def test_seasonal_returns_the_requested_months_labelled_low_confidence(cli
     assert fake.params()["forecast_days"] == "93"
 
 
+async def test_seasonal_leaves_out_a_last_month_the_api_has_no_data_for(client, fake):
+    payload = seasonal_payload()
+    for name, values in payload["monthly"].items():
+        if name != "time":
+            values[-1] = None
+    fake.route(SEASONAL, payload)
+    result = await client.call_tool("seasonal", {**POINT, "months": 5})
+    data = result.structured_content
+    assert data["table"]["time"] == [
+        "2026-10-01",
+        "2026-11-01",
+        "2026-12-01",
+        "2027-01-01",
+    ]
+    assert any("last 1 month(s)" in note for note in data["notes"])
+
+
 async def test_seasonal_caps_forecast_days_at_the_api_limit(client, fake):
     fake.route(SEASONAL, seasonal_payload())
     await client.call_tool("seasonal", {**POINT, "months": 7})

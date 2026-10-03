@@ -1,6 +1,6 @@
 """Backward-looking and long-range tools: historical weather and climate projections."""
 
-from datetime import date, timedelta
+from datetime import date
 from typing import Annotated
 
 from mcp.server import MCPServer
@@ -21,6 +21,7 @@ from weather_agents.server.openmeteo.tables import (
     by_month,
     climate_yearly,
     climatology,
+    drop_empty_tail,
     rollup,
     table_from_block,
 )
@@ -31,7 +32,6 @@ from weather_agents.server.tools.common import location_of, state_of, upstream_e
 ARCHIVE_START = date(1940, 1, 1)
 DETAIL_DAYS = 31
 MONTHLY_DAYS = 730
-ARCHIVE_LAG_DAYS = 5
 HISTORICAL_HOW: dict[str, Agg] = {"precipitation_sum": "sum"}
 
 CLIMATE_MODELS = (
@@ -73,8 +73,8 @@ def register(mcp: MCPServer) -> None:
 
         Up to 31 days returns one row per day. Up to 2 years returns one row per month. Longer
         returns 12 rows, the average of each calendar month over all the years, which is a
-        climate normal: for 30-year normals ask for 1991-01-01 to 2020-12-31. The last 5 days
-        are often missing because the data lags.
+        climate normal: for 30-year normals ask for 1991-01-01 to 2020-12-31. The newest days can
+        have no data yet. Those rows are left out and a note says how many.
         """
         today = state_of(ctx).today()
         if start_date < ARCHIVE_START:
@@ -96,10 +96,10 @@ def register(mcp: MCPServer) -> None:
             timezone="auto",
             daily=open_meteo_names(variables or DEFAULT_BASIC),
         )
-        daily = table_from_block(data, "daily")
+        daily, missing = drop_empty_tail(table_from_block(data, "daily"))
         notes: list[str] = []
-        if end_date > today - timedelta(days=ARCHIVE_LAG_DAYS):
-            notes.append("The last 5 days are often missing because the reanalysis lags.")
+        if missing:
+            notes.append(f"The newest {missing} day(s) have no data yet and are left out.")
         span = (end_date - start_date).days + 1
         if span <= DETAIL_DAYS:
             return WeatherResult(location=location_of(data), kind="daily", table=daily, notes=notes)

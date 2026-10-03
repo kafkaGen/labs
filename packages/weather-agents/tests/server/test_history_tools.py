@@ -18,14 +18,21 @@ DAILY_VALUES = {
 }
 
 
-def serve_archive(fake) -> None:
+def serve_archive(fake, *, empty_tail: int = 0) -> None:
+    """Serve constant days. The last `empty_tail` come back as nulls, like a lagging archive."""
+
     def archive(request: httpx.Request):
         params = request.url.params
-        return constant_daily(
+        payload = constant_daily(
             date.fromisoformat(params["start_date"]),
             date.fromisoformat(params["end_date"]),
             DAILY_VALUES,
         )
+        if empty_tail:
+            for name, values in payload["daily"].items():
+                if name != "time":
+                    values[-empty_tail:] = [None] * empty_tail
+        return payload
 
     fake.route_with(ARCHIVE, archive)
 
@@ -78,10 +85,18 @@ async def test_a_thirty_year_normal_returns_twelve_rows(client, fake):
     assert any("30 calendar years" in note for note in data["notes"])
 
 
-async def test_recent_dates_get_a_lag_note(client, fake):
+async def test_days_the_archive_has_no_data_for_yet_are_left_out_with_a_note(client, fake):
+    serve_archive(fake, empty_tail=3)
+    result = await historical(client, "2026-09-20", "2026-10-01")
+    data = result.structured_content
+    assert data["table"]["time"][-1] == "2026-09-28"
+    assert any("newest 3 day(s)" in note for note in data["notes"])
+
+
+async def test_a_complete_range_gets_no_missing_data_note(client, fake):
     serve_archive(fake)
     result = await historical(client, "2026-09-20", "2026-10-01")
-    assert any("last 5 days" in note for note in result.structured_content["notes"])
+    assert not any("no data yet" in note for note in result.structured_content["notes"])
 
 
 @pytest.mark.parametrize(

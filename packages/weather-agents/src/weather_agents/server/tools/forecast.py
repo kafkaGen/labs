@@ -9,7 +9,12 @@ from pydantic import Field
 
 from weather_agents.server.models import Latitude, Longitude, WeatherResult
 from weather_agents.server.openmeteo.client import ENSEMBLE, FORECAST, SEASONAL
-from weather_agents.server.openmeteo.tables import ensemble_stats, head, table_from_block
+from weather_agents.server.openmeteo.tables import (
+    drop_empty_tail,
+    ensemble_stats,
+    head,
+    table_from_block,
+)
 from weather_agents.server.openmeteo.variables import (
     DEFAULT_BASIC,
     DEFAULT_FORECAST,
@@ -135,9 +140,8 @@ def register(mcp: MCPServer) -> None:
             forecast_days=min(months * 31, SEASONAL_MAX_FORECAST_DAYS),
             timezone="auto",
         )
-        return WeatherResult(
-            location=location_of(data),
-            kind="monthly",
-            table=head(table_from_block(data, "monthly"), months),
-            notes=[SEASONAL_NOTE],
-        )
+        table, missing = drop_empty_tail(head(table_from_block(data, "monthly"), months))
+        notes = [SEASONAL_NOTE]
+        if missing:
+            notes.append(f"The last {missing} month(s) have no data yet and are left out.")
+        return WeatherResult(location=location_of(data), kind="monthly", table=table, notes=notes)

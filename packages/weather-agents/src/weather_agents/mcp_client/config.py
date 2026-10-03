@@ -60,7 +60,8 @@ def _parse_entry(name: str, entry: object) -> StdioServerConfig:
     # The isinstance check also keeps an unhashable JSON value from raising TypeError below.
     if not isinstance(kind, str) or kind not in SUPPORTED_TYPES:
         supported = ", ".join(sorted(SUPPORTED_TYPES))
-        raise ConfigError(f"server '{name}': type {kind!r} is not supported, supported: {supported}")
+        message = f"server '{name}': type {kind!r} is not supported, supported: {supported}"
+        raise ConfigError(message)
     try:
         return StdioServerConfig.model_validate(entry)
     except ValidationError as error:

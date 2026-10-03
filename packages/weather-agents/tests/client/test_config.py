@@ -39,7 +39,9 @@ def test_type_defaults_to_stdio_and_may_be_given(tmp_path):
 
 def test_an_unsupported_type_names_the_server_and_the_supported_types(tmp_path):
     payload = {"mcpServers": {"web": {"type": "http", "url": "http://127.0.0.1:8000/mcp"}}}
-    with pytest.raises(ConfigError, match="server 'web': type 'http' is not supported, supported: stdio"):
+    with pytest.raises(
+        ConfigError, match="server 'web': type 'http' is not supported, supported: stdio"
+    ):
         load_config(write(tmp_path, payload))
 
 

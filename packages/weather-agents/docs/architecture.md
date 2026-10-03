@@ -192,8 +192,9 @@ The model's history and the on-screen transcript are separate. The runtime owns 
 
 Nothing is deployed. Everything runs on my machine from the uv workspace.
 
-- **stdio:** `uv run weather-agents chat --runtime api|sdk --mcp-config mcp.stdio.json`. One terminal. The MCP client in use spawns the server as its child.
-- **HTTP:** `uv run weather-agents serve [--stateless]` in one terminal, then `chat --mcp-config mcp.http.json` in another.
+- **The server alone (Built):** `python -m weather_agents.server` runs it over stdio. `make inspect` in `packages/weather-agents` opens it in MCP Inspector and needs `npx`. `make test` runs the offline tests. `make test-live` calls the real Open-Meteo.
+- **stdio (Planned):** `uv run weather-agents chat --runtime api|sdk --mcp-config mcp.stdio.json`. One terminal. The MCP client in use spawns the server as its child.
+- **HTTP (Planned):** `uv run weather-agents serve [--stateless]` in one terminal, then `chat --mcp-config mcp.http.json` in another.
 - **Needs:** `.env` with `ANTHROPIC_API_KEY`, and `WEATHER_MCP_TOKEN` once HTTP auth exists. Network access to Anthropic and Open-Meteo. No Node; the SDK bundles its binary.
 
 ## Cross-cutting concerns

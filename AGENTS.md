@@ -2,7 +2,11 @@
 
 ## This repo is a monorepo
 
-Each project lives in its own directory under `packages/` and owns its code, its docs, and its decisions. The root holds only what every project shares: tooling, config, and the skills and rules in `.cursor/`.
+Each project lives in its own directory under `packages/` and owns its code, its docs, and its decisions. The root holds only what every project shares: tooling, config, and the skills and rules in `.cursor/`. The one exception is `study/`.
+
+## Study workspaces live in `study/`
+
+`study/` holds learning workspaces, not code. Each topic gets its own directory, `study/<topic>/`, with the layout the `teach` skill defines: `MISSION.md`, `RESOURCES.md`, `NOTES.md`, `lessons/`, `reference/`, `learning-records/`, and `assets/`. When the `teach` skill says "the current directory", read it as that topic directory. A study workspace is not a package: it has no `docs/`, no ADRs, and nothing in `packages/` imports from it.
 
 ## Docs paths are relative to a package
 

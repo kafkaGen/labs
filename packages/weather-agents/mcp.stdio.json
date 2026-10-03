@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "open-meteo": {
+      "command": "uv",
+      "args": ["run", "--package", "weather-agents", "python", "-m", "weather_agents.server"]
+    }
+  }
+}

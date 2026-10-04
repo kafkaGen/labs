@@ -1,0 +1,9 @@
+[project]
+name = "labs-logging"
+version = "0.1.0"
+description = "Shared structured logging for Python applications."
+requires-python = ">=3.12"
+
+[tool.uv]
+# Keep the design-only workspace member valid without an implementation to build.
+package = false

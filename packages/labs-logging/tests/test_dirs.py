@@ -26,3 +26,24 @@ def test_run_dir_create_creates_once(tmp_path):
     assert run.lock_path.name == "lock"
     with pytest.raises(FileExistsError):
         run.path.mkdir()
+
+
+def test_run_dir_create_retries_on_collision(tmp_path, monkeypatch):
+    now = datetime.datetime.now(datetime.timezone.utc)
+    (tmp_path / "collision").mkdir()
+    names = iter(("collision", "fresh"))
+    monkeypatch.setattr("labs_logging.dirs.new_run_name", lambda _now: next(names))
+
+    run = RunDir.create(tmp_path, now)
+
+    assert run.path.name == "fresh"
+    assert run.path.is_dir()
+
+
+def test_run_dir_create_raises_after_all_collisions(tmp_path, monkeypatch):
+    now = datetime.datetime.now(datetime.timezone.utc)
+    (tmp_path / "same").mkdir()
+    monkeypatch.setattr("labs_logging.dirs.new_run_name", lambda _now: "same")
+
+    with pytest.raises(FileExistsError):
+        RunDir.create(tmp_path, now)

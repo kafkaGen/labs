@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -9,6 +9,7 @@ resolution-markers = [
 [manifest]
 members = [
     "labs",
+    "labs-logging",
     "weather-agents",
 ]
 
@@ -404,6 +405,11 @@ dev = [
     { name = "ruff", specifier = ">=0.16.7" },
     { name = "ty", specifier = ">=0.0.80" },
 ]
+
+[[package]]
+name = "labs-logging"
+version = "0.1.0"
+source = { virtual = "packages/labs-logging" }
 
 [[package]]
 name = "markdown-it-py"

@@ -1,10 +1,14 @@
 import io
 import json
 import logging
+import re
+import threading
+from datetime import datetime
 from typing import Any
 
 import pytest
 
+from labs_logging import runtime as runtime_mod
 from labs_logging import (
     AlreadyConfiguredError,
     LoggingConfig,
@@ -70,7 +74,12 @@ def test_console_renders_both_event_kinds(tmp_path, synchronous, console_json):
     assert runtime.healthy
     if console_json:
         lines = [json.loads(line) for line in out.splitlines()]
-        assert [line["timestamp"] is not None for line in lines] == [True, True]
+        assert len(lines) == 2
+        for line in lines:
+            assert isinstance(line["timestamp"], str)
+            datetime.fromisoformat(line["timestamp"])
+    else:
+        assert re.search(r"\d{4}-\d{2}-\d{2}", out)
 
 
 @pytest.mark.parametrize("synchronous", [True, False])
@@ -296,3 +305,118 @@ def test_queue_overflow_counts_drops(tmp_path):
     gate.set()
     runtime.shutdown()
     assert drops >= 1
+
+
+def test_shutdown_does_not_hang_on_full_queue_and_blocked_handler(tmp_path, monkeypatch):
+    monkeypatch.setattr(runtime_mod, "_STOP_TIMEOUT", 0.1)
+    monkeypatch.setattr(runtime_mod, "_JOIN_TIMEOUT", 0.1)
+    gate = threading.Event()
+
+    class Blocked(logging.Handler):
+        def emit(self, record):
+            gate.wait(10)
+
+    runtime = configure(
+        _cfg(
+            tmp_path,
+            io.StringIO(),
+            console=False,
+            file=False,
+            queue_size=2,
+            extra_handlers=[Blocked()],
+        )
+    )
+    for _ in range(10):
+        logging.getLogger("lib").warning("x")
+    try:
+        runtime.shutdown()
+        assert not runtime.healthy
+        assert any("listener" in error for error in runtime.errors)
+    finally:
+        gate.set()
+    for thread in threading.enumerate():
+        if thread.name == "labs-logging-listener":
+            thread.join(5)
+    assert "labs-logging-listener" not in {t.name for t in threading.enumerate()}
+
+
+def test_listener_survives_unexpected_sink_error():
+    import queue
+
+    errors: list[BaseException] = []
+    handled: list[str] = []
+
+    class Flaky(logging.Handler):
+        def handle(self, record):
+            if record.getMessage() == "bad":
+                raise RuntimeError("sink broke")
+            handled.append(record.getMessage())
+            return True
+
+    q: queue.Queue = queue.Queue()
+    listener = runtime_mod._Listener(q, Flaky(), errors.append)
+    listener.start()
+    for msg in ("bad", "good"):
+        q.put(logging.LogRecord("n", logging.INFO, "f", 1, msg, None, None))
+    listener.stop()
+    assert handled == ["good"]
+    assert len(errors) == 1
+    assert "sink broke" in repr(errors[0])
+    assert not listener.is_alive()
+
+
+def test_late_setup_failure_rolls_back_everything(tmp_path, monkeypatch):
+    root = logging.getLogger()
+    root_level = root.level
+    fam_level = logging.getLogger("a").level
+    installed: list[Any] = []
+    original_install = runtime_mod.Runtime._install
+
+    def install_then_record(self):
+        installed.append(self)
+        original_install(self)
+
+    def boom(*args, **kwargs):
+        raise OSError("late failure")
+
+    monkeypatch.setattr(runtime_mod.Runtime, "_install", install_then_record)
+    monkeypatch.setattr(runtime_mod, "cleanup_runs", boom)
+    with pytest.raises(SetupError):
+        configure(_cfg(tmp_path, io.StringIO(), level_overrides={"a.x": logging.DEBUG}))
+    assert [p for p in tmp_path.iterdir() if p.is_dir()] == []
+    assert root.handlers == []
+    assert root.level == root_level
+    assert logging.getLogger("a").level == fam_level
+    assert logging.getLogger("a.x").level == logging.NOTSET
+    (failed,) = installed
+    assert not failed._run_lock.locked
+    assert "labs-logging-listener" not in {t.name for t in threading.enumerate()}
+    monkeypatch.undo()
+    configure(_cfg(tmp_path, io.StringIO(), file=False)).shutdown()
+
+
+def test_final_drop_summary_emitted_at_shutdown(tmp_path, capsys):
+    gate = threading.Event()
+
+    class Slow(logging.Handler):
+        def emit(self, record):
+            gate.wait(5)
+
+    runtime = configure(
+        _cfg(
+            tmp_path,
+            io.StringIO(),
+            console=False,
+            file=False,
+            queue_size=1,
+            extra_handlers=[Slow()],
+        )
+    )
+    for _ in range(10):
+        logging.getLogger("lib").warning("x")
+    capsys.readouterr()
+    # The first drop was reported; later ones fall inside the report interval.
+    assert runtime.drops > 1
+    gate.set()
+    runtime.shutdown()
+    assert f"dropped {runtime.drops} events" in capsys.readouterr().err

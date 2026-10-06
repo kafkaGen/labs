@@ -10,6 +10,7 @@ import queue
 import sys
 import threading
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TextIO, cast
@@ -38,6 +39,8 @@ _ACTIVE_LOCK = threading.Lock()
 
 _STOP = object()
 _JOIN_TIMEOUT = 10.0
+_STOP_TIMEOUT = 5.0
+_POLL_INTERVAL = 0.2
 
 
 def _diagnostic(message: str) -> None:
@@ -111,6 +114,7 @@ class _DroppingQueueHandler(logging.handlers.QueueHandler):
         self._closed = False
         self._lock = threading.Lock()
         self._last_report = float("-inf")
+        self._reported_drops = 0
 
     def prepare(self, record: logging.LogRecord) -> logging.LogRecord:
         # structlog leaves the event dict in record.msg. The base class stringifies
@@ -122,42 +126,81 @@ class _DroppingQueueHandler(logging.handlers.QueueHandler):
         with self._lock:
             if self._closed:
                 return
+            message = None
             try:
                 self.queue.put_nowait(record)
             except queue.Full:
                 self.drops += 1
-                self._report()
+                message = self._due_report()
+        # Print outside the lock so a slow stderr cannot stall other producers.
+        if message:
+            _diagnostic(message)
 
     def stop_accepting(self) -> None:
         with self._lock:
             self._closed = True
 
-    def _report(self) -> None:
+    def _due_report(self) -> str | None:
+        """Return a drop message if the report interval has passed. Caller holds the lock."""
         now = time.monotonic()
-        if now - self._last_report >= self._REPORT_EVERY:
-            self._last_report = now
-            _diagnostic(f"dropped {self.drops} events (queue full)")
+        if now - self._last_report < self._REPORT_EVERY:
+            return None
+        self._last_report = now
+        self._reported_drops = self.drops
+        return f"dropped {self.drops} events (queue full)"
+
+    def report_final(self) -> None:
+        """Report drops that the periodic report never covered."""
+        with self._lock:
+            unreported = self.drops > self._reported_drops
+            self._reported_drops = self.drops
+            total = self.drops
+        if unreported:
+            _diagnostic(f"dropped {total} events in total (queue full)")
 
 
 class _Listener(threading.Thread):
     """Drain the queue into one sink until told to stop."""
 
-    def __init__(self, q: queue.Queue[Any], sink: logging.Handler) -> None:
+    def __init__(
+        self,
+        q: queue.Queue[Any],
+        sink: logging.Handler,
+        on_error: Callable[[BaseException], None],
+    ) -> None:
         super().__init__(name="labs-logging-listener", daemon=True)
         self._queue = q
         self._sink = sink
+        self._on_error = on_error
+        self._abandoned = threading.Event()
 
     def run(self) -> None:
         while True:
-            item = self._queue.get()
+            try:
+                item = self._queue.get(timeout=_POLL_INTERVAL)
+            except queue.Empty:
+                # No stop sentinel was queued; exit once the backlog is drained.
+                if self._abandoned.is_set():
+                    return
+                continue
             if item is _STOP:
                 return
-            self._sink.handle(item)
+            try:
+                self._sink.handle(item)
+            except Exception as exc:
+                self._on_error(exc)
 
     def stop(self) -> None:
-        """Ask the listener to finish queued events, then wait for it."""
-        self._queue.put(_STOP)
+        """Ask the listener to finish queued events, then wait for it, within bounds."""
+        try:
+            self._queue.put(_STOP, timeout=_STOP_TIMEOUT)
+        except queue.Full:
+            self._abandoned.set()
+            self._on_error(TimeoutError("listener queue stayed full; stop signal not queued"))
         self.join(timeout=_JOIN_TIMEOUT)
+        if self.is_alive():
+            self._abandoned.set()
+            self._on_error(TimeoutError("listener did not stop in time; continuing shutdown"))
 
 
 def _console_handler(config: LoggingConfig, builder: EnvelopeBuilder) -> logging.Handler:
@@ -268,6 +311,9 @@ class Runtime:
         if first:
             _diagnostic(f"{type(handler).__name__} failed: {exc!r}")
 
+    def _note_listener_error(self, exc: BaseException) -> None:
+        self._note_error(logging.Handler(), exc)
+
     def _install(self) -> None:
         config = self._config
         self._run_lock.acquire()
@@ -304,7 +350,7 @@ class Runtime:
             self._queue_handler = _DroppingQueueHandler(q)
             self._queue_handler.addFilter(capture)
             self._dispatch = self._queue_handler
-            self._listener = _Listener(q, fan_out)
+            self._listener = _Listener(q, fan_out, self._note_listener_error)
             self._listener.start()
         self._root.addHandler(self._dispatch)
 
@@ -316,6 +362,8 @@ class Runtime:
             self._queue_handler.stop_accepting()
         if self._listener is not None and self._listener.is_alive():
             self._listener.stop()
+        if self._queue_handler is not None:
+            self._queue_handler.report_final()
         for handler in self._owned:
             self._safely(handler.flush)
             self._safely(handler.close)

@@ -36,21 +36,20 @@ class JsonFileHandler(logging.Handler):
         self.encoding = encoding
 
     def emit(self, record: logging.LogRecord) -> None:
-        try:
-            message = self.format(record) + "\n"
-        except Exception:
-            self.handleError(record)
-            return
-        try:
-            if (
-                self.path.exists()
-                and self.path.stat().st_size + len(message.encode(self.encoding)) > self.max_bytes
-            ):
-                self._rollover()
-            with self.path.open("a", encoding=self.encoding) as stream:
-                stream.write(message)
-        except Exception:
-            self.handleError(record)
+        """Append one rendered record.
+
+        Raises:
+            Exception: Any formatting or file error. It is not routed to
+                `handleError`, so the runtime's fan-out can mark itself unhealthy.
+        """
+        message = self.format(record) + "\n"
+        if (
+            self.path.exists()
+            and self.path.stat().st_size + len(message.encode(self.encoding)) > self.max_bytes
+        ):
+            self._rollover()
+        with self.path.open("a", encoding=self.encoding) as stream:
+            stream.write(message)
 
     def _rollover(self) -> None:
         if self.backups > 0:

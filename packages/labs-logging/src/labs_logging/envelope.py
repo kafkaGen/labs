@@ -27,12 +27,18 @@ class EnvelopeBuilder:
     def __init__(self, *, application: str, run_id: str, process_id: str) -> None:
         self._meta = {"application": application, "run_id": run_id, "process_id": process_id}
 
-    def build(self, logger: object, method_name: str, event_dict: EventDict) -> EventDict:
+    def build(
+        self, logger: object | None, method_name: str | None, event_dict: EventDict
+    ) -> EventDict:
         captured = event_dict.pop("_captured_context", {})
-        for key, value in self._meta.items():
-            event_dict.setdefault(key, value)
-
+        # Runtime fields come from the builder, or from a foreign record's captured
+        # runtime; a caller field with the same name goes to `context`.
+        runtime = {**self._meta, **event_dict.pop("_runtime", {})}
         context: dict[str, object] = {}
+        for key in self._meta:
+            if key in event_dict:
+                context[key] = event_dict.pop(key)
+        event_dict.update(runtime)
         for key in list(event_dict):
             if key in _ENVELOPE_KEYS or key.startswith("_"):
                 continue
@@ -52,11 +58,13 @@ def _add_logger_name(_, __, event_dict: EventDict) -> EventDict:
     return event_dict
 
 
-def _add_log_level(_, __, event_dict: EventDict) -> EventDict:
+def _add_log_level(_, method_name: str | None, event_dict: EventDict) -> EventDict:
     # `foreign_pre_chain` runs against a parsed record when driven directly, so
     # the level must come from the record, not the processor's `method_name`.
     record = event_dict.get("_record")
-    event_dict["level"] = record.levelname.lower() if record is not None else None
+    event_dict["level"] = (
+        record.levelname.lower() if record is not None else (method_name or "info")
+    )
     return event_dict
 
 
@@ -64,10 +72,11 @@ def _inject_captured(_, __, event_dict: EventDict) -> EventDict:
     record = event_dict.get("_record")
     if record is not None:
         event_dict["timestamp"] = getattr(record, "labs_ts", None)
-        app, run, pid = getattr(record, "labs_runtime", (None, None, None))
-        event_dict["application"] = app
-        event_dict["run_id"] = run
-        event_dict["process_id"] = pid
+        names = ("application", "run_id", "process_id")
+        values = getattr(record, "labs_runtime", (None, None, None))
+        event_dict["_runtime"] = {
+            name: value for name, value in zip(names, values, strict=True) if value is not None
+        }
         event_dict["_captured_context"] = getattr(record, "labs_context", {})
         # `ExtraAdder` copied the transport attributes into the event dict;
         # they are runtime metadata, not context, so drop them before `build`.
@@ -77,10 +86,16 @@ def _inject_captured(_, __, event_dict: EventDict) -> EventDict:
 
 
 def _format_foreign_exception(_, __, event_dict: EventDict) -> EventDict:
+    # `ProcessorFormatter` copies `exc_info` and `stack_info` into the event dict.
+    # Format the traceback into `exception`; drop `stack_info` (no envelope field).
+    exc_info = event_dict.pop("exc_info", None)
+    event_dict.pop("stack_info", None)
     record = event_dict.get("_record")
-    if record is not None and record.exc_info:
+    if not exc_info and record is not None:
+        exc_info = record.exc_info
+    if exc_info:
         event_dict["exception"] = structlog.processors.format_exc_info(
-            None, None, {"exc_info": record.exc_info}
+            None, "", {"exc_info": exc_info}
         )["exception"]
     return event_dict
 

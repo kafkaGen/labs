@@ -21,3 +21,5 @@ build-backend = "uv_build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# pytest's log capture installs root handlers, which setup refuses by design.
+addopts = "-p no:logging"

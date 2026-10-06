@@ -34,3 +34,14 @@ def test_lock_releases_on_process_exit(tmp_path):
     )
     subprocess.run([sys.executable, "-c", code], check=True, cwd=tmp_path)
     assert FileLock(tmp_path / "lock").try_acquire() is True
+
+
+def test_failed_try_acquire_closes_its_file(tmp_path):
+    holder = FileLock(tmp_path / "lock")
+    holder.acquire()
+    loser = FileLock(tmp_path / "lock")
+    assert loser.try_acquire() is False
+    assert loser._fh is None
+    holder.release()
+    assert loser.try_acquire() is True
+    loser.release()

@@ -32,6 +32,10 @@ class FileLock:
         try:
             self._lock(blocking=False)
         except OSError:
+            # Close now so a lock that was never acquired holds no open file.
+            if self._fh is not None:
+                self._fh.close()
+                self._fh = None
             return False
         self._locked = True
         return True

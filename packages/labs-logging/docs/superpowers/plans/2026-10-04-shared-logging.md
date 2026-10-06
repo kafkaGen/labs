@@ -1197,6 +1197,17 @@ class _Listener(threading.Thread):
                         self._on_error(exc)
 
 
+def _strip_meta(_, __, event_dict):
+    """Drop ProcessorFormatter's meta keys if present.
+
+    Structlog events still carry `_record` and `_from_structlog` here. Foreign
+    records lost them in `build`, so `remove_processors_meta` would raise KeyError.
+    """
+    event_dict.pop("_record", None)
+    event_dict.pop("_from_structlog", None)
+    return event_dict
+
+
 def _console_handler(config: LoggingConfig, builder: EnvelopeBuilder) -> logging.Handler:
     stream = config.console_stream if config.console_stream is not None else sys.stderr
     colors = config.console_colors
@@ -1204,7 +1215,7 @@ def _console_handler(config: LoggingConfig, builder: EnvelopeBuilder) -> logging
         colors = bool(getattr(stream, "isatty", lambda: False)())
     formatter = structlog.stdlib.ProcessorFormatter(
         processors=[
-            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            _strip_meta,
             renderer_for(config.console_json, colors),
         ],
         foreign_pre_chain=foreign_pre_chain(builder),
@@ -1218,7 +1229,7 @@ def _console_handler(config: LoggingConfig, builder: EnvelopeBuilder) -> logging
 def _file_formatter(builder: EnvelopeBuilder) -> structlog.stdlib.ProcessorFormatter:
     return structlog.stdlib.ProcessorFormatter(
         processors=[
-            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            _strip_meta,
             structlog.processors.JSONRenderer(sort_keys=True, ensure_ascii=False),
         ],
         foreign_pre_chain=foreign_pre_chain(builder),

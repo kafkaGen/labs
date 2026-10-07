@@ -48,6 +48,14 @@ Main `LoggingConfig` fields:
 destination failures and dropped events. A failing handler marks the runtime unhealthy
 and does not stop the other handlers.
 
+Two lifecycle limits follow from the design. A forked child inherits the parent's
+active runtime and its threads do not survive the fork, so call `configure` only after
+the fork, in a fresh process. The listener thread is a daemon and nothing registers an
+`atexit` hook, so a process that skips `shutdown()` can lose events still in the queue.
+
+Windows support is written but untested. The lock uses `msvcrt` there, and only the
+POSIX path (`fcntl.flock`) has run in tests.
+
 ## Files
 
 Each launch creates `<log_dir>/<UTC start time>-<suffix>/` with `main.jsonl`, any

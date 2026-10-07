@@ -201,7 +201,6 @@ def test_shutdown_is_idempotent_and_setup_works_again(tmp_path):
     runtime = configure(_cfg(tmp_path, io.StringIO(), file=False))
     runtime.shutdown()
     runtime.shutdown()
-    runtime.close()
     again = configure(_cfg(tmp_path, io.StringIO(), file=False))
     again.shutdown()
 

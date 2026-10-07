@@ -9,7 +9,15 @@ __all__ = ["JsonFileHandler", "rotate_files"]
 
 
 def rotate_files(path: Path, backups: int) -> None:
-    """Shift `path`, `path.1`, ... one slot right, dropping the oldest."""
+    """Shift `path`, `path.1`, ... one slot right, dropping the oldest.
+
+    Args:
+        path: The active file.
+        backups: Number of numbered backups to keep. 0 shifts nothing.
+
+    Raises:
+        OSError: A rename fails.
+    """
     for i in range(backups - 1, 0, -1):
         src = path.with_name(f"{path.name}.{i}")
         dst = path.with_name(f"{path.name}.{i + 1}")
@@ -24,6 +32,13 @@ class JsonFileHandler(logging.Handler):
 
     With `backups == 0`, rollover unlinks the current file and starts again.
     With `backups > 0`, the active file shifts into numbered backups first.
+
+    Args:
+        path: The active file.
+        max_bytes: Size at which the next write triggers rollover. One oversized
+            record is still written whole.
+        backups: Rotated backups to keep.
+        encoding: File encoding.
     """
 
     def __init__(
@@ -37,6 +52,9 @@ class JsonFileHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         """Append one rendered record.
+
+        Args:
+            record: The record to format and write.
 
         Raises:
             Exception: Any formatting or file error. It is not routed to

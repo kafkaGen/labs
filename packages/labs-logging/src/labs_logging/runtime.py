@@ -19,7 +19,7 @@ import structlog
 from structlog.typing import EventDict
 
 from labs_logging.config import LoggingConfig
-from labs_logging.dirs import RunDir, resolve_log_dir
+from labs_logging.dirs import RUN_NAME_PATTERN, RunDir, resolve_log_dir
 from labs_logging.envelope import (
     TIMESTAMP_FORMAT,
     EnvelopeBuilder,
@@ -75,9 +75,10 @@ class _CaptureFilter(logging.Filter):
         if not hasattr(record, "labs_ts"):
             record.labs_ts = datetime.now(UTC).strftime(TIMESTAMP_FORMAT)
             record.labs_runtime = self._runtime
-            record.labs_context = normalize(dict(structlog.contextvars.get_contextvars()))
-            # Structlog records carry an event dict the producer chain already snapshotted.
+            # Structlog records carry an event dict the producer chain already
+            # merged and snapshotted, so only foreign records need the capture.
             if not isinstance(record.msg, dict):
+                record.labs_context = normalize(dict(structlog.contextvars.get_contextvars()))
                 self._snapshot_foreign(record)
         return True
 
@@ -263,7 +264,12 @@ def _file_handler(config: LoggingConfig, run: RunDir, builder: EnvelopeBuilder) 
 
 
 def _is_run_dir(path: Path) -> bool:
-    return path.is_dir() and not path.is_symlink() and (path / "lock").is_file()
+    return (
+        RUN_NAME_PATTERN.fullmatch(path.name) is not None
+        and path.is_dir()
+        and not path.is_symlink()
+        and (path / "lock").is_file()
+    )
 
 
 def cleanup_runs(root: Path, retain: int, active_name: str) -> None:
@@ -446,10 +452,6 @@ class Runtime:
             with _ACTIVE_LOCK:
                 if _ACTIVE is self:
                     _ACTIVE = None
-
-    def close(self) -> None:
-        """Alias for `shutdown`."""
-        self.shutdown()
 
     def __enter__(self) -> Runtime:
         return self

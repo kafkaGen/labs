@@ -13,15 +13,12 @@ __all__ = [
     "LoggingError",
     "Runtime",
     "SetupError",
-    "__version__",
     "bind_context",
     "bound_context",
     "configure",
     "get_logger",
     "unbind_context",
 ]
-
-__version__ = "0.1.0"
 
 
 def get_logger(name: str) -> structlog.stdlib.BoundLogger:

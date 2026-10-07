@@ -10,7 +10,14 @@ __all__ = ["FileLock"]
 
 
 class FileLock:
-    """Serialize access to a resource across processes via an OS-held lock."""
+    """Serialize access to a resource across processes via an OS-held lock.
+
+    The OS releases the lock when the holding process exits, even after a crash.
+    Windows is untested.
+
+    Args:
+        path: Lock file. Its parent directory is created on first use.
+    """
 
     def __init__(self, path: Path | str) -> None:
         self.path = Path(path)
@@ -23,11 +30,25 @@ class FileLock:
             self._fh = self.path.open("a+b")
 
     def acquire(self) -> None:
+        """Block until the lock is held.
+
+        Raises:
+            OSError: The lock file cannot be opened or locked. On Windows, also
+                raised when the wait times out.
+        """
         self._open()
         self._lock(blocking=True)
         self._locked = True
 
     def try_acquire(self) -> bool:
+        """Take the lock without waiting.
+
+        Returns:
+            True if this object now holds the lock, False if another holder has it.
+
+        Raises:
+            OSError: The lock file cannot be opened.
+        """
         self._open()
         try:
             self._lock(blocking=False)
@@ -46,8 +67,8 @@ class FileLock:
         if os.name == "nt":
             import msvcrt
 
-            # msvcrt.locking blocks until the region is free regardless of a
-            # nonblocking flag, so use LK_NBLCK semantics only via try/except.
+            # LK_NBLCK raises OSError at once when the byte is held. LK_LOCK retries
+            # for about ten seconds, then raises OSError, so it is not unbounded.
             flag = msvcrt.LK_LOCK if blocking else msvcrt.LK_NBLCK
             msvcrt.locking(self._fh.fileno(), flag, 1)
         else:
@@ -57,6 +78,7 @@ class FileLock:
             fcntl.flock(self._fh.fileno(), flags)
 
     def release(self) -> None:
+        """Release the lock and close the file. Does nothing when not held."""
         if not self._locked or self._fh is None:
             return
         if os.name == "nt":
@@ -74,6 +96,7 @@ class FileLock:
 
     @property
     def locked(self) -> bool:
+        """Whether this object holds the lock."""
         return self._locked
 
     def __enter__(self) -> FileLock:

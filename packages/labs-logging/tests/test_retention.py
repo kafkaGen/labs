@@ -90,6 +90,17 @@ def test_unrelated_entries_are_left_alone(tmp_path):
     assert not runs[0].path.exists()
 
 
+def test_directory_with_a_lock_but_not_a_run_name_is_left_alone(tmp_path):
+    runs = [_make_run(tmp_path, i) for i in range(7)]
+    lookalike = tmp_path / "0000-lookalike"
+    lookalike.mkdir()
+    (lookalike / "lock").write_text("")
+    (lookalike / "keep").write_text("keep")
+    cleanup_runs(tmp_path, retain=5, active_name="none")
+    assert (lookalike / "keep").read_text() == "keep"
+    assert not runs[0].path.exists()
+
+
 def test_symlinked_run_dir_is_not_followed(tmp_path):
     outside = tmp_path / "outside"
     outside.mkdir()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import secrets
 from datetime import UTC, datetime
 from pathlib import Path
@@ -10,7 +11,10 @@ from platformdirs import user_log_dir
 
 from labs_logging.config import LoggingConfig
 
-__all__ = ["RunDir", "new_run_name", "resolve_log_dir"]
+__all__ = ["RUN_NAME_PATTERN", "RunDir", "new_run_name", "resolve_log_dir"]
+
+# Matches the names `new_run_name` produces, so cleanup never touches other directories.
+RUN_NAME_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{6}Z-[0-9a-f]{6}")
 
 
 def resolve_log_dir(config: LoggingConfig) -> Path:

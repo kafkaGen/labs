@@ -115,21 +115,21 @@ class _FanOutHandler(logging.Handler):
 
     def __init__(
         self,
-        handlers: list[logging.Handler],
-        on_error: Any,
+        handlers: list[tuple[str, logging.Handler]],
+        on_error: Callable[[str, BaseException], None],
     ) -> None:
         super().__init__(logging.NOTSET)
         self._handlers = handlers
         self._on_error = on_error
 
     def emit(self, record: logging.LogRecord) -> None:
-        for handler in self._handlers:
+        for source, handler in self._handlers:
             if record.levelno < handler.level:
                 continue
             try:
                 handler.handle(record)
             except Exception as exc:
-                self._on_error(handler, exc)
+                self._on_error(source, exc)
 
 
 class _DroppingQueueHandler(logging.handlers.QueueHandler):
@@ -304,8 +304,9 @@ class Runtime:
         self._run_lock = FileLock(run.lock_path)
         self._restored_levels: dict[str, int] = {}
         self._restored_root_level = self._root.level
-        self._owned: list[logging.Handler] = []
-        self._extra: list[logging.Handler] = []
+        # Each handler carries a unique label that keys the error report.
+        self._owned: list[tuple[str, logging.Handler]] = []
+        self._extra: list[tuple[str, logging.Handler]] = []
         self._dispatch: logging.Handler | None = None
         self._queue_handler: _DroppingQueueHandler | None = None
         self._listener: _Listener | None = None
@@ -314,7 +315,7 @@ class Runtime:
         self._healthy = True
         self._errors: list[str] = []
         self._error_count = 0
-        self._reported: set[int] = set()
+        self._reported: set[str] = set()
 
     @property
     def drops(self) -> int:
@@ -342,19 +343,20 @@ class Runtime:
         """Total destination errors, including those past the recorded limit."""
         return self._error_count
 
-    def _note_error(self, handler: logging.Handler, exc: BaseException) -> None:
+    def _note_error(self, source: str, exc: BaseException) -> None:
+        """Record a destination error; print a diagnostic once per `source` label."""
         with self._state_lock:
             self._healthy = False
             self._error_count += 1
             if len(self._errors) < _MAX_ERRORS:
-                self._errors.append(f"{type(handler).__name__}: {exc!r}")
-            first = id(handler) not in self._reported
-            self._reported.add(id(handler))
+                self._errors.append(f"{source}: {exc!r}")
+            first = source not in self._reported
+            self._reported.add(source)
         if first:
-            _diagnostic(f"{type(handler).__name__} failed: {exc!r}")
+            _diagnostic(f"{source} failed: {exc!r}")
 
     def _note_listener_error(self, exc: BaseException) -> None:
-        self._note_error(logging.Handler(), exc)
+        self._note_error("listener", exc)
 
     def _install(self) -> None:
         config = self._config
@@ -377,10 +379,14 @@ class Runtime:
         self._root.setLevel(config.level)
 
         if config.console:
-            self._owned.append(_console_handler(config, builder))
+            self._owned.append(("console", _console_handler(config, builder)))
         if config.file:
-            self._owned.append(_file_handler(config, self._run, builder))
-        self._extra = [h for h in config.extra_handlers if isinstance(h, logging.Handler)]
+            self._owned.append(("JsonFileHandler", _file_handler(config, self._run, builder)))
+        self._extra = [
+            (f"{type(h).__name__}[{i}]", h)
+            for i, h in enumerate(config.extra_handlers)
+            if isinstance(h, logging.Handler)
+        ]
 
         fan_out = _FanOutHandler([*self._owned, *self._extra], self._note_error)
         capture = _CaptureFilter(config.app, self._run.name, str(os.getpid()))
@@ -406,20 +412,20 @@ class Runtime:
             self._listener.stop()
         if self._queue_handler is not None:
             self._queue_handler.report_final()
-        for handler in self._owned:
-            self._safely(handler.flush)
-            self._safely(handler.close)
-        for handler in self._extra:
-            self._safely(handler.flush)
+        for source, handler in self._owned:
+            self._safely(source, handler.flush)
+            self._safely(source, handler.close)
+        for source, handler in self._extra:
+            self._safely(source, handler.flush)
         for name, level in self._restored_levels.items():
             logging.getLogger(name).setLevel(level)
         self._root.setLevel(self._restored_root_level)
 
-    def _safely(self, action: Any) -> None:
+    def _safely(self, source: str, action: Callable[[], object]) -> None:
         try:
             action()
         except Exception as exc:
-            self._note_error(logging.Handler(), exc)
+            self._note_error(source, exc)
 
     def shutdown(self) -> None:
         """Drain queued events, flush, clean up old runs, and release ownership."""
@@ -434,7 +440,7 @@ class Runtime:
                 with FileLock(self._log_dir / ".coord"):
                     cleanup_runs(self._log_dir, self._config.retain_runs, self._run.name)
             except OSError as exc:
-                self._note_error(logging.Handler(), exc)
+                self._note_error("shutdown", exc)
         finally:
             self._run_lock.release()
             with _ACTIVE_LOCK:

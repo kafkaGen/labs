@@ -42,6 +42,7 @@ class EnvelopeBuilder:
         self, logger: object | None, method_name: str | None, event_dict: EventDict
     ) -> EventDict:
         captured = event_dict.pop("_captured_context", {})
+        diverted = event_dict.pop("_diverted", {})
         # Runtime fields come from the builder, or from a foreign record's captured
         # runtime; a caller field with the same name goes to `context`.
         runtime = {**self._meta, **event_dict.pop("_runtime", {})}
@@ -54,13 +55,40 @@ class EnvelopeBuilder:
             if key in _ENVELOPE_KEYS or key.startswith("_"):
                 continue
             context[key] = event_dict.pop(key)
-        context = {**captured, **context}
+        context = {**captured, **diverted, **context}
 
         ordered: dict[str, object] = {
             key: event_dict[key] for key in _ENVELOPE_KEYS if key in event_dict
         }
         ordered["context"] = context
         return ordered
+
+
+# Caller fields with these names would be overwritten or would spoof the envelope.
+_DIVERTED_KEYS = ("timestamp", "level", "logger", "exception")
+
+
+def _divert(event_dict: EventDict, keys: tuple[str, ...]) -> None:
+    moved = {key: event_dict.pop(key) for key in keys if key in event_dict}
+    if moved:
+        event_dict["_diverted"] = {**event_dict.get("_diverted", {}), **moved}
+
+
+def _divert_reserved(_, __, event_dict: EventDict) -> EventDict:
+    # Runs before the processors that set these keys. `event` is the message here.
+    _divert(event_dict, _DIVERTED_KEYS)
+    return event_dict
+
+
+def _divert_foreign_reserved(_, __, event_dict: EventDict) -> EventDict:
+    # `ExtraAdder` just merged `extra` into the event dict, where an `event`
+    # extra replaced the message. Put the message back and keep the extra.
+    record = event_dict.get("_record")
+    if record is not None and "event" in record.__dict__:
+        event_dict["_diverted"] = {"event": event_dict["event"]}
+        event_dict["event"] = record.getMessage()
+    _divert(event_dict, _DIVERTED_KEYS)
+    return event_dict
 
 
 def _add_logger_name(_, __, event_dict: EventDict) -> EventDict:
@@ -130,6 +158,7 @@ def producer_processors(builder: EnvelopeBuilder) -> list[Callable]:
     """Structlog processors that run in the producing thread or task."""
     return [
         structlog.contextvars.merge_contextvars,
+        _divert_reserved,
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
         structlog.stdlib.PositionalArgumentsFormatter(),
@@ -145,6 +174,7 @@ def foreign_pre_chain(builder: EnvelopeBuilder) -> list[Callable]:
     """Processors for standard-library records; timestamp and context come from the filter."""
     return [
         structlog.stdlib.ExtraAdder(),
+        _divert_foreign_reserved,
         _add_log_level,
         _add_logger_name,
         _format_foreign_exception,

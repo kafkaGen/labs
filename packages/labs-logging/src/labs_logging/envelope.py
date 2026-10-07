@@ -10,12 +10,17 @@ from structlog.typing import EventDict, ExcInfo
 from labs_logging.normalize import normalize
 
 __all__ = [
+    "TIMESTAMP_FORMAT",
     "EnvelopeBuilder",
     "foreign_pre_chain",
     "format_exception",
     "producer_processors",
     "renderer_for",
 ]
+
+# UTC ISO 8601 with microseconds and `Z`. `isoformat` drops zero microseconds, so
+# both event paths format with this one strftime string instead.
+TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
 
 # Record attributes that the producer-side filter writes for the foreign chain.
 CAPTURED_ATTRS = ("labs_context", "labs_runtime", "labs_ts", "labs_exception")
@@ -162,7 +167,7 @@ def producer_processors(builder: EnvelopeBuilder) -> list[Callable]:
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
         structlog.stdlib.PositionalArgumentsFormatter(),
-        structlog.processors.TimeStamper(fmt="iso", utc=True, key="timestamp"),
+        structlog.processors.TimeStamper(fmt=TIMESTAMP_FORMAT, utc=True, key="timestamp"),
         structlog.processors.format_exc_info,
         _normalize_values,
         builder.build,

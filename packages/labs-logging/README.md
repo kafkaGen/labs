@@ -64,8 +64,8 @@ Each line is one JSON object. Keys are written in alphabetical order (the render
 The envelope keys are `application`, `context`, `event`, `level`, `logger`,
 `process_id`, `run_id`, and `timestamp`, plus `exception` when there is one. Fields you
 pass to a logger go under `context`, and a field of the same name as an envelope key
-cannot overwrite it. The timestamp is ISO 8601 UTC. Structlog events end in `Z` and
-standard-library records in `+00:00`.
+cannot overwrite it. The timestamp is ISO 8601 UTC with microseconds and a trailing
+`Z`, for example `2026-10-04T21:00:00.000123Z`.
 
 `labs_logging.rotation.JsonFileHandler` is the file writer. Used inside a runtime, its
 errors are caught and recorded in `Runtime.errors`. Used on its own, `emit` raises on a

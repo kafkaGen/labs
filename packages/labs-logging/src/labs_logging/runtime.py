@@ -21,6 +21,7 @@ from structlog.typing import EventDict
 from labs_logging.config import LoggingConfig
 from labs_logging.dirs import RunDir, resolve_log_dir
 from labs_logging.envelope import (
+    TIMESTAMP_FORMAT,
     EnvelopeBuilder,
     foreign_pre_chain,
     format_exception,
@@ -72,7 +73,7 @@ class _CaptureFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         # Idempotent: the first filter to see a record wins.
         if not hasattr(record, "labs_ts"):
-            record.labs_ts = datetime.now(UTC).isoformat()
+            record.labs_ts = datetime.now(UTC).strftime(TIMESTAMP_FORMAT)
             record.labs_runtime = self._runtime
             record.labs_context = normalize(dict(structlog.contextvars.get_contextvars()))
             # Structlog records carry an event dict the producer chain already snapshotted.

@@ -5,9 +5,20 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import structlog
-from structlog.typing import EventDict
+from structlog.typing import EventDict, ExcInfo
 
-__all__ = ["EnvelopeBuilder", "foreign_pre_chain", "producer_processors", "renderer_for"]
+from labs_logging.normalize import normalize
+
+__all__ = [
+    "EnvelopeBuilder",
+    "foreign_pre_chain",
+    "format_exception",
+    "producer_processors",
+    "renderer_for",
+]
+
+# Record attributes that the producer-side filter writes for the foreign chain.
+CAPTURED_ATTRS = ("labs_context", "labs_runtime", "labs_ts", "labs_exception")
 
 _ENVELOPE_KEYS = (
     "timestamp",
@@ -80,24 +91,39 @@ def _inject_captured(_, __, event_dict: EventDict) -> EventDict:
         event_dict["_captured_context"] = getattr(record, "labs_context", {})
         # `ExtraAdder` copied the transport attributes into the event dict;
         # they are runtime metadata, not context, so drop them before `build`.
-        for key in ("labs_context", "labs_runtime", "labs_ts"):
+        for key in CAPTURED_ATTRS:
             event_dict.pop(key, None)
     return event_dict
 
 
+def format_exception(exc_info: ExcInfo) -> str:
+    """Render an exception as one traceback string, without frame locals."""
+    return structlog.processors.format_exc_info(None, "", {"exc_info": exc_info})["exception"]
+
+
 def _format_foreign_exception(_, __, event_dict: EventDict) -> EventDict:
     # `ProcessorFormatter` copies `exc_info` and `stack_info` into the event dict.
-    # Format the traceback into `exception`; drop `stack_info` (no envelope field).
+    # Drop `stack_info` (no envelope field). The producer-side filter normally
+    # formatted the traceback already; format here only for records it never saw.
     exc_info = event_dict.pop("exc_info", None)
     event_dict.pop("stack_info", None)
     record = event_dict.get("_record")
+    captured = event_dict.pop("labs_exception", None)
+    if captured is None and record is not None:
+        captured = getattr(record, "labs_exception", None)
+    if captured is not None:
+        event_dict["exception"] = captured
+        return event_dict
     if not exc_info and record is not None:
         exc_info = record.exc_info
     if exc_info:
-        event_dict["exception"] = structlog.processors.format_exc_info(
-            None, "", {"exc_info": exc_info}
-        )["exception"]
+        event_dict["exception"] = format_exception(exc_info)
     return event_dict
+
+
+def _normalize_values(_, __, event_dict: EventDict) -> EventDict:
+    # Snapshot every value now: the listener thread serializes it later.
+    return {key: normalize(value) for key, value in event_dict.items()}
 
 
 def producer_processors(builder: EnvelopeBuilder) -> list[Callable]:
@@ -109,6 +135,7 @@ def producer_processors(builder: EnvelopeBuilder) -> list[Callable]:
         structlog.stdlib.PositionalArgumentsFormatter(),
         structlog.processors.TimeStamper(fmt="iso", utc=True, key="timestamp"),
         structlog.processors.format_exc_info,
+        _normalize_values,
         builder.build,
         structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
     ]

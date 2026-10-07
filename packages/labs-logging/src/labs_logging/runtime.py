@@ -23,11 +23,13 @@ from labs_logging.dirs import RunDir, resolve_log_dir
 from labs_logging.envelope import (
     EnvelopeBuilder,
     foreign_pre_chain,
+    format_exception,
     producer_processors,
     renderer_for,
 )
 from labs_logging.errors import AlreadyConfiguredError, SetupError
 from labs_logging.lock import FileLock
+from labs_logging.normalize import normalize
 from labs_logging.rotation import JsonFileHandler
 
 __all__ = ["Runtime", "cleanup_runs", "configure"]
@@ -41,6 +43,12 @@ _STOP = object()
 _JOIN_TIMEOUT = 10.0
 _STOP_TIMEOUT = 5.0
 _POLL_INTERVAL = 0.2
+_MAX_ERRORS = 100
+
+# Attributes every LogRecord has; anything else on a record came from `extra`.
+_RECORD_ATTRS = frozenset(
+    {*logging.LogRecord("", 0, "", 0, "", (), None).__dict__, "message", "asctime", "taskName"}
+)
 
 
 def _diagnostic(message: str) -> None:
@@ -66,8 +74,28 @@ class _CaptureFilter(logging.Filter):
         if not hasattr(record, "labs_ts"):
             record.labs_ts = datetime.now(UTC).isoformat()
             record.labs_runtime = self._runtime
-            record.labs_context = dict(structlog.contextvars.get_contextvars())
+            record.labs_context = normalize(dict(structlog.contextvars.get_contextvars()))
+            # Structlog records carry an event dict the producer chain already snapshotted.
+            if not isinstance(record.msg, dict):
+                self._snapshot_foreign(record)
         return True
+
+    @staticmethod
+    def _snapshot_foreign(record: logging.LogRecord) -> None:
+        """Freeze message, `extra`, and traceback text so the listener reads stable data."""
+        try:
+            record.msg = record.getMessage()
+        except Exception:
+            record.msg = f"{normalize(record.msg)} (args: {normalize(record.args)})"
+        record.args = None
+        for key in [k for k in record.__dict__ if k not in _RECORD_ATTRS]:
+            if not key.startswith("labs_"):
+                record.__dict__[key] = normalize(record.__dict__[key])
+        if record.exc_info and record.exc_info[0] is not None:
+            try:
+                record.labs_exception = format_exception(record.exc_info)
+            except Exception:
+                record.labs_exception = record.exc_info[0].__name__
 
 
 def _strip_meta(_logger: object, _method: str, event_dict: EventDict) -> EventDict:
@@ -284,6 +312,7 @@ class Runtime:
         self._state_lock = threading.Lock()
         self._healthy = True
         self._errors: list[str] = []
+        self._error_count = 0
         self._reported: set[int] = set()
 
     @property
@@ -298,14 +327,26 @@ class Runtime:
 
     @property
     def errors(self) -> tuple[str, ...]:
-        """Descriptions of destination errors, oldest first."""
+        """Descriptions of the first destination errors, oldest first.
+
+        Only the first 100 are kept. When more occurred, a final entry counts the rest.
+        """
         with self._state_lock:
-            return tuple(self._errors)
+            kept = tuple(self._errors)
+            rest = self._error_count - len(kept)
+        return (*kept, f"{rest} more errors not recorded") if rest else kept
+
+    @property
+    def error_count(self) -> int:
+        """Total destination errors, including those past the recorded limit."""
+        return self._error_count
 
     def _note_error(self, handler: logging.Handler, exc: BaseException) -> None:
         with self._state_lock:
             self._healthy = False
-            self._errors.append(f"{type(handler).__name__}: {exc!r}")
+            self._error_count += 1
+            if len(self._errors) < _MAX_ERRORS:
+                self._errors.append(f"{type(handler).__name__}: {exc!r}")
             first = id(handler) not in self._reported
             self._reported.add(id(handler))
         if first:

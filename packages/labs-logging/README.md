@@ -40,3 +40,14 @@ def _clean_root_logger():
     yield
     root.handlers[:] = saved
 ```
+
+## Event values
+
+Values passed to the logger are copied into JSON-safe data when you call it, so later
+mutation cannot change a queued event. Cycles become `"<cycle>"`, and unsupported
+types become a string such as `"Decimal: Decimal('1.5')"`. Standard-library
+messages are formatted, and tracebacks rendered, in the calling thread too.
+
+`Runtime.errors` keeps the first 100 destination errors plus a count of the rest.
+`Runtime.error_count` has the total. Copying costs time per call, so avoid passing
+very large objects as fields.

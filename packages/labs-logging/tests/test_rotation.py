@@ -46,6 +46,7 @@ def test_backups_rotate(tmp_path):
     assert (tmp_path / "main.jsonl.1").read_text() == "bbbb\n"
     assert (tmp_path / "main.jsonl.2").read_text() == "aaaa\n"
 
+
 def test_write_failure_propagates(tmp_path):
     handler = _handler(tmp_path, 100, 0)
     (tmp_path / "main.jsonl").mkdir()

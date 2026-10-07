@@ -157,4 +157,7 @@ def renderer_for(console_json: bool, colors: bool) -> Callable:
     """A ProcessorFormatter renderer: console or JSON."""
     if console_json:
         return structlog.processors.JSONRenderer(sort_keys=True, ensure_ascii=False)
-    return structlog.dev.ConsoleRenderer(colors=colors)
+    # The exception is already a string; the default rich formatter would warn about it.
+    return structlog.dev.ConsoleRenderer(
+        colors=colors, exception_formatter=structlog.dev.plain_traceback
+    )

@@ -3,6 +3,7 @@ import json
 import logging
 import re
 import threading
+import warnings
 from datetime import datetime
 from typing import Any
 
@@ -420,3 +421,25 @@ def test_final_drop_summary_emitted_at_shutdown(tmp_path, capsys):
     gate.set()
     runtime.shutdown()
     assert f"dropped {runtime.drops} events" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("colors", [True, False])
+def test_console_renders_exceptions_without_warnings(tmp_path, colors):
+    stream = io.StringIO()
+    runtime = configure(_cfg(tmp_path, stream, synchronous=True, console_colors=colors))
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            try:
+                raise ValueError("structlog boom")
+            except ValueError:
+                get_logger("a.s").exception("failed")
+            try:
+                raise KeyError("stdlib boom")
+            except KeyError:
+                logging.getLogger("other.lib").exception("failed too")
+    finally:
+        runtime.shutdown()
+    out = stream.getvalue()
+    assert "ValueError: structlog boom" in out
+    assert "KeyError: 'stdlib boom'" in out

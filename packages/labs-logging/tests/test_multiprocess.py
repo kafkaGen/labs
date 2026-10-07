@@ -107,3 +107,21 @@ def test_concurrent_startup_gives_each_process_its_own_run(tmp_path):
     kept = _runs(log_dir)
     assert len(kept) == 3
     assert [r.name for r in kept[:2]] == [r.name for r in runs[-2:]]
+
+
+def test_killed_process_run_is_deletable_at_next_configure(tmp_path):
+    log_dir, sync = tmp_path / "logs", tmp_path / "sync"
+    sync.mkdir()
+    victim = _spawn(log_dir, sync, "victim", 1, hold=True)
+    (sync / "go").touch()
+    _wait_ready(sync, ("victim",))
+    (killed,) = _runs(log_dir)
+    # SIGKILL skips shutdown(), so only the OS can release the run's lock.
+    victim.kill()
+    victim.communicate(timeout=DEADLINE)
+    assert killed.exists()
+    configure(
+        LoggingConfig(app="a", family="a", console=False, log_dir=log_dir, retain_runs=1)
+    ).shutdown()
+    assert not killed.exists()
+    assert len(_runs(log_dir)) == 1

@@ -57,7 +57,7 @@ class LoggingConfig(BaseModel):
     synchronous: bool = False
     queue_size: int = Field(default=10_000, ge=1)
     max_bytes: int = Field(default=10 * 1024 * 1024, ge=1)
-    backups: int = Field(default=0, ge=0)
+    backups: int = Field(default=3, ge=0)
     retain_runs: int = Field(default=5, ge=0)
     extra_handlers: list[object] = Field(default_factory=list)
 

@@ -17,7 +17,7 @@ def test_defaults():
     assert cfg.synchronous is False
     assert cfg.queue_size == 10_000
     assert cfg.max_bytes == 10 * 1024 * 1024
-    assert cfg.backups == 0
+    assert cfg.backups == 3
     assert cfg.retain_runs == 5
     assert cfg.extra_handlers == []
 

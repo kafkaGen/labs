@@ -40,7 +40,7 @@ Main `LoggingConfig` fields:
 | `file` | on | File destination. |
 | `synchronous` | `False` | `True` writes in the calling thread. `False` uses one listener thread and a bounded queue. |
 | `queue_size` | 10,000 | Background queue capacity. A full queue drops the new event and counts it in `Runtime.drops`. |
-| `max_bytes`, `backups` | 10 MiB, 0 | Size per file and rotated backups per run. |
+| `max_bytes`, `backups` | 10 MiB, 3 | Size per file and rotated backups per run. |
 | `retain_runs` | 5 | Newest runs kept per application. |
 | `extra_handlers` | `[]` | Your own `logging.Handler` instances. The runtime flushes them on shutdown and never closes them. |
 

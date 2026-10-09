@@ -23,6 +23,7 @@ from labs_logging.dirs import RUN_NAME_PATTERN, RunDir, resolve_log_dir
 from labs_logging.envelope import (
     TIMESTAMP_FORMAT,
     EnvelopeBuilder,
+    foreign_envelope,
     foreign_pre_chain,
     format_exception,
     producer_processors,
@@ -112,23 +113,47 @@ def _strip_meta(_logger: object, _method: str, event_dict: EventDict) -> EventDi
 
 
 class _FanOutHandler(logging.Handler):
-    """Deliver one record to each destination; one failing handler cannot block the rest."""
+    """Deliver one record to each destination; one failing handler cannot block the rest.
+
+    Extra handlers get a copy whose `msg` is the JSON envelope dict, so a shipper sees
+    the same payload for structlog events and standard-library records.
+    """
 
     def __init__(
         self,
         handlers: list[tuple[str, logging.Handler]],
         on_error: Callable[[str, BaseException], None],
+        extras: frozenset[str] = frozenset(),
+        builder: EnvelopeBuilder | None = None,
     ) -> None:
         super().__init__(logging.NOTSET)
         self._handlers = handlers
         self._on_error = on_error
+        self._extras = extras
+        self._builder = builder
+
+    def _envelope_view(self, record: logging.LogRecord) -> logging.LogRecord:
+        if isinstance(record.msg, dict) or self._builder is None:
+            return record  # structlog events already carry the envelope
+        view = logging.makeLogRecord(record.__dict__)
+        view.msg = foreign_envelope(self._builder, record)
+        view.args = None
+        view.exc_info = None
+        view.exc_text = None
+        return view
 
     def emit(self, record: logging.LogRecord) -> None:
+        extra_view: logging.LogRecord | None = None
         for source, handler in self._handlers:
             if record.levelno < handler.level:
                 continue
             try:
-                handler.handle(record)
+                target = record
+                if source in self._extras:
+                    if extra_view is None:
+                        extra_view = self._envelope_view(record)
+                    target = extra_view
+                handler.handle(target)
             except Exception as exc:
                 self._on_error(source, exc)
 
@@ -394,7 +419,12 @@ class Runtime:
             if isinstance(h, logging.Handler)
         ]
 
-        fan_out = _FanOutHandler([*self._owned, *self._extra], self._note_error)
+        fan_out = _FanOutHandler(
+            [*self._owned, *self._extra],
+            self._note_error,
+            extras=frozenset(source for source, _ in self._extra),
+            builder=builder,
+        )
         capture = _CaptureFilter(config.app, self._run.name, str(os.getpid()))
         if config.synchronous:
             self._dispatch = fan_out

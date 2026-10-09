@@ -245,7 +245,7 @@ def test_extra_handlers_are_flushed_not_closed(tmp_path):
             self.closed = False
 
         def emit(self, record):
-            self.messages.append(record.getMessage())
+            self.messages.append(record.msg["event"])
 
         def flush(self):
             self.flushed += 1

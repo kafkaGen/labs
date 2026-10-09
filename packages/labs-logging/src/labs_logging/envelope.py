@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 
 import structlog
@@ -12,6 +13,7 @@ from labs_logging.normalize import normalize
 __all__ = [
     "TIMESTAMP_FORMAT",
     "EnvelopeBuilder",
+    "foreign_envelope",
     "foreign_pre_chain",
     "format_exception",
     "producer_processors",
@@ -131,7 +133,9 @@ def _inject_captured(_, __, event_dict: EventDict) -> EventDict:
 
 def format_exception(exc_info: ExcInfo) -> str:
     """Render an exception as one traceback string, without frame locals."""
-    return structlog.processors.format_exc_info(None, "", {"exc_info": exc_info})["exception"]
+    return structlog.processors.format_exc_info(None, "", {"exc_info": exc_info}).get(
+        "exception", ""
+    )
 
 
 def _format_foreign_exception(_, __, event_dict: EventDict) -> EventDict:
@@ -149,7 +153,8 @@ def _format_foreign_exception(_, __, event_dict: EventDict) -> EventDict:
         return event_dict
     if not exc_info and record is not None:
         exc_info = record.exc_info
-    if exc_info:
+    # `logging.exception()` outside a handler sets (None, None, None), which is truthy.
+    if exc_info and exc_info[0] is not None:
         event_dict["exception"] = format_exception(exc_info)
     return event_dict
 
@@ -188,6 +193,21 @@ def foreign_pre_chain(builder: EnvelopeBuilder) -> list[Callable]:
     ]
 
 
+def foreign_envelope(builder: EnvelopeBuilder, record: logging.LogRecord) -> EventDict:
+    """Build the envelope for a standard-library record, as the formatters do.
+
+    Mirrors how `ProcessorFormatter` seeds the event dict for a foreign record.
+    """
+    event_dict: EventDict = {"event": record.getMessage(), "_record": record}
+    if record.exc_info:
+        event_dict["exc_info"] = record.exc_info
+    if record.stack_info:
+        event_dict["stack_info"] = record.stack_info
+    for proc in foreign_pre_chain(builder):
+        event_dict = proc(None, record.levelname.lower(), event_dict)
+    return event_dict
+
+
 # One distinct style per level: blue, green, yellow, red, bold white on red.
 _LEVEL_STYLES = {
     "debug": "\x1b[34m",
@@ -209,5 +229,6 @@ def renderer_for(console_json: bool, colors: bool) -> Callable:
     return structlog.dev.ConsoleRenderer(
         colors=colors,
         exception_formatter=structlog.dev.plain_traceback,
-        level_styles=_LEVEL_STYLES if colors else None,
+        # structlog 24 annotates this as `Styles` but accepts the dict it documents.
+        level_styles=_LEVEL_STYLES if colors else None,  # ty: ignore[invalid-argument-type]
     )

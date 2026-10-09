@@ -142,3 +142,13 @@ def test_foreign_extra_does_not_overwrite_runtime_fields():
     out = _run_foreign(_builder(), record, "hi")
     assert out["application"] == "app"
     assert out["context"]["application"] == "evil"
+
+
+def test_console_levels_have_distinct_colors() -> None:
+    renderer = renderer_for(console_json=False, colors=True)
+    styles = {
+        level: renderer(None, level, {"event": "m", "level": level})
+        for level in ("debug", "info", "warning", "error", "critical")
+    }
+    prefixes = {level: out.split("m", 1)[0] for level, out in styles.items()}
+    assert len(set(prefixes.values())) == 5

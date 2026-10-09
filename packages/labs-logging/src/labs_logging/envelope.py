@@ -188,11 +188,27 @@ def foreign_pre_chain(builder: EnvelopeBuilder) -> list[Callable]:
     ]
 
 
+_RESET = "\x1b[0m"
+# One distinct style per level: blue, green, yellow, red, bold white on red.
+_LEVEL_STYLES = {
+    "debug": "\x1b[34m",
+    "info": "\x1b[32m",
+    "warning": "\x1b[33m",
+    "warn": "\x1b[33m",
+    "error": "\x1b[31m",
+    "exception": "\x1b[31m",
+    "critical": "\x1b[1;37;41m",
+    "notset": "\x1b[35m",
+}
+
+
 def renderer_for(console_json: bool, colors: bool) -> Callable:
     """A ProcessorFormatter renderer: console or JSON."""
     if console_json:
         return structlog.processors.JSONRenderer(sort_keys=True, ensure_ascii=False)
     # The exception is already a string; the default rich formatter would warn about it.
     return structlog.dev.ConsoleRenderer(
-        colors=colors, exception_formatter=structlog.dev.plain_traceback
+        colors=colors,
+        exception_formatter=structlog.dev.plain_traceback,
+        level_styles=_LEVEL_STYLES if colors else None,
     )

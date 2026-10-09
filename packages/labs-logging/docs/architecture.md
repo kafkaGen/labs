@@ -21,17 +21,15 @@ C4Context
     title System context: labs-logging
 
     Person(dev, "Developer", "Reads the console and the log files")
-    System_Boundary(host, "Host process") {
-        System(app, "Host application", "Calls get_logger and configure")
-        System(lib, "labs-logging", "Formats and routes log events")
-    }
+    System(app, "Host application", "Calls get_logger and configure in its own process")
+    System(lib, "labs-logging", "Formats and routes log events inside the host process")
     System_Ext(libs, "Third-party libraries", "Log through stdlib logging")
     SystemDb_Ext(fs, "Local filesystem", "Run directories under the log dir")
-    System_Ext(collector, "Log collector", "Vector, Fluent Bit, Filebeat")
-    System_Ext(cloud, "Cloud storage", "Azure Blob, S3")
+    System_Ext(collector, "Log collector", "Vector, Fluent Bit or Filebeat")
+    System_Ext(cloud, "Cloud storage", "Azure Blob or S3")
 
     Rel(dev, lib, "Reads", "stderr, JSON Lines")
-    Rel(app, lib, "Logs through", "get_logger, configure")
+    Rel(app, lib, "Logs through", "get_logger")
     Rel(libs, lib, "Logs through", "stdlib logging")
     Rel(lib, fs, "Appends to", "files, OS locks")
     Rel(collector, fs, "Tails", "main.jsonl")

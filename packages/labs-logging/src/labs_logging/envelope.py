@@ -188,7 +188,6 @@ def foreign_pre_chain(builder: EnvelopeBuilder) -> list[Callable]:
     ]
 
 
-_RESET = "\x1b[0m"
 # One distinct style per level: blue, green, yellow, red, bold white on red.
 _LEVEL_STYLES = {
     "debug": "\x1b[34m",

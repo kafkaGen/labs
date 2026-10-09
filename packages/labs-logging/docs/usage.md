@@ -131,3 +131,15 @@ with configure(LoggingConfig(app="t", family="t", log_dir=tmp_path, synchronous=
                              console=False)):
     ...
 ```
+
+If you cannot disable the plugin, clear root handlers in a fixture instead:
+
+```python
+@pytest.fixture(autouse=True)
+def _clean_root_logger():
+    root = logging.getLogger()
+    saved = root.handlers[:]
+    root.handlers.clear()
+    yield
+    root.handlers[:] = saved
+```

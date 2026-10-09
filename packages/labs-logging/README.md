@@ -3,34 +3,27 @@
 Structured logging for Python applications in the labs monorepo. It writes colorful
 console output to stderr and rotating JSON Lines files, one isolated directory per run.
 
-## Configure
+## Use it
 
-Call `configure` once at startup and shut the runtime down on exit. `get_logger` and
-the standard-library `logging` module both feed the same destinations.
+Add the workspace dependency, then follow [`docs/usage.md`](docs/usage.md) for setup,
+loggers, context, handlers, threads, and tests.
 
-```python
-import logging
+```toml
+[project]
+dependencies = ["labs-logging"]
 
-from labs_logging import LoggingConfig, bind_context, bound_context, configure, get_logger
-
-runtime = configure(LoggingConfig(app="my-app", family="my_app"))
-with runtime:
-    log = get_logger("my_app.worker")
-    bind_context(session="abc")
-    log.info("started", jobs=3)
-    with bound_context(request_id="r-1"):
-        log.info("handling")
-    logging.getLogger("third.party").warning("also captured")
+[tool.uv.sources]
+labs-logging = { workspace = true }
 ```
 
-`app` names the log directory and must be one safe path component. `family` is the
-logger-name prefix for your application. Importing the package or calling `get_logger`
-opens no files and starts no threads. `configure` raises `AlreadyConfiguredError` while
-a runtime is active in the process, and `SetupError` when setup fails, for example
-because the root logger already has handlers. A failed setup leaves nothing installed.
-After `shutdown()` you can configure again.
+Import with `from labs_logging import ...`. `app` names the log directory and must be one
+safe path component. `family` is the logger-name prefix for your application. Importing
+the package or calling `get_logger` opens no files and starts no threads. `configure`
+raises `AlreadyConfiguredError` while a runtime is active in the process, and
+`SetupError` when setup fails, for example because the root logger already has handlers.
+A failed setup leaves nothing installed. After `shutdown()` you can configure again.
 
-Main `LoggingConfig` fields:
+## Configuration reference
 
 | Field | Default | Meaning |
 |---|---|---|
@@ -81,33 +74,7 @@ write or format failure instead of calling `logging`'s `handleError`.
 
 ## Testing
 
-`configure()` raises `SetupError` when the root logger already has handlers. Pytest's
-logging plugin attaches some during each test, so tests that call `configure()` must
-clear them first. Either disable the plugin:
-
-```toml
-[tool.pytest.ini_options]
-addopts = "-p no:logging"
-```
-
-or clear the root handlers in a fixture:
-
-```python
-import logging
-
-import pytest
-
-
-@pytest.fixture(autouse=True)
-def _clean_root_logger():
-    root = logging.getLogger()
-    saved = root.handlers[:]
-    root.handlers.clear()
-    yield
-    root.handlers[:] = saved
-```
-
-Point `log_dir` at `tmp_path` so tests never touch the real log directory.
+See the Tests section of [`docs/usage.md`](docs/usage.md).
 
 ## Event values
 

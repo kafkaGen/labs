@@ -17,23 +17,25 @@
 ## System context
 
 ```mermaid
-C4Context
-    title System context: labs-logging
+flowchart LR
+    dev([Developer])
+    libs[Third-party libraries]
+    collector[Log collector]
+    cloud[Cloud storage]
 
-    Person(dev, "Developer", "Reads the console and the log files")
-    System(app, "Host application", "Calls get_logger and configure in its own process")
-    System(lib, "labs-logging", "Formats and routes log events inside the host process")
-    System_Ext(libs, "Third-party libraries", "Log through stdlib logging")
-    SystemDb_Ext(fs, "Local filesystem", "Run directories under the log dir")
-    System_Ext(collector, "Log collector", "Vector, Fluent Bit or Filebeat")
-    System_Ext(cloud, "Cloud storage", "Azure Blob or S3")
+    subgraph host[Host process]
+        app[Host application]
+        lib[labs-logging]
+    end
 
-    Rel(dev, lib, "Reads", "stderr, JSON Lines")
-    Rel(app, lib, "Logs through", "get_logger")
-    Rel(libs, lib, "Logs through", "stdlib logging")
-    Rel(lib, fs, "Appends to", "files, OS locks")
-    Rel(collector, fs, "Tails", "main.jsonl")
-    Rel(lib, cloud, "Ships to", "custom handler")
+    fs[(Local filesystem)]
+
+    dev -->|reads stderr and JSON Lines| lib
+    app -->|get_logger, configure| lib
+    libs -->|stdlib logging| lib
+    lib -->|appends files, OS locks| fs
+    collector -->|tails main.jsonl| fs
+    lib -->|custom handler| cloud
 ```
 
 - **Host application:** configures once, then every module calls `get_logger`.

@@ -6,12 +6,13 @@
 
 ## Constraints that shape this
 
-`packages/labs-logging/docs/vision.md` does not exist. These come from the design session and the spec.
+From [`vision.md`](vision.md) and the spec.
 
 - **Application-neutral:** any application in the monorepo can use it. It names no application, and a dummy app is the only consumer inside the package.
 - **Local first, extensible later:** it writes to the local machine now. Azure Blob and S3 destinations are expected and must plug in without editing the package.
 - **Stdout is not ours:** MCP stdio servers carry protocol traffic on stdout, so the console writes to stderr only.
 - **Independent processes:** several processes of the same application may run at once and must not share or overwrite a file.
+- **Time and effort budget:** none fixed (assumed in the vision).
 - **Expected size:** not stated.
 
 ## System context
@@ -196,8 +197,6 @@ It runs inside the host process. It starts when the host calls `configure`. Impo
 
 **Open**
 
-- **Should `configure` register `atexit` shutdown by default and work without `with`?** Changes the Runtime lifecycle and removes the lost-queue case.
-- **Should third-party loggers get their own level (`third_party_level`)?** Changes the root-logger level wiring.
 - **Should the console hide `application`, `run_id`, `process_id`, and empty `context`?** Changes the console renderer chain only.
 
 **Assumed**

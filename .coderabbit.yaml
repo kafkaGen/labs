@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+reviews:
+  # Never request changes, so CodeRabbit cannot block a merge.
+  request_changes_workflow: false
+  auto_review:
+    enabled: true
+    # Keep a PR in draft while work is in progress; marking it ready triggers the first review.
+    drafts: false
+    auto_incremental_review: true

@@ -20,7 +20,7 @@ def test_both_paths_share_one_timestamp_format(tmp_path, synchronous):
         for _ in range(50):
             get_logger("a.s").info("structured")
             logging.getLogger("lib").info("foreign")
-    (main,) = tmp_path.glob("*/main.jsonl")
+    (main,) = (tmp_path / "a").glob("*/main.jsonl")
     events = [json.loads(line) for line in main.read_text("utf-8").splitlines()]
     assert len(events) == 100
     assert all(TIMESTAMP.fullmatch(e["timestamp"]) for e in events)

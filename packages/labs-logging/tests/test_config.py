@@ -34,3 +34,10 @@ def test_nonnegative_limits():
         LoggingConfig(app="a", family="x", queue_size=0)
     with pytest.raises(ValidationError):
         LoggingConfig(app="a", family="x", backups=-1)
+
+
+def test_extra_handlers_must_be_logging_handlers():
+    handler = logging.NullHandler()
+    assert LoggingConfig(app="a", family="a", extra_handlers=[handler]).extra_handlers == [handler]
+    with pytest.raises(ValidationError):
+        LoggingConfig(app="a", family="a", extra_handlers=["not a handler"])

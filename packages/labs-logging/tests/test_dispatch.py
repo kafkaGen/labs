@@ -11,7 +11,7 @@ from labs_logging import LoggingConfig, LoggingError, configure, get_logger
 
 
 def _run_dirs(tmp_path):
-    return [p for p in tmp_path.iterdir() if p.is_dir() and p.name != ".coord"]
+    return [p for p in (tmp_path / "a").iterdir() if p.is_dir() and p.name != ".coord"]
 
 
 def _main_text(tmp_path):

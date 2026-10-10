@@ -36,7 +36,7 @@ def _finish(procs):
 
 
 def _runs(log_dir):
-    return sorted(p for p in log_dir.iterdir() if p.is_dir())
+    return sorted(p for p in (log_dir / "a").iterdir() if p.is_dir())
 
 
 def _records(run):

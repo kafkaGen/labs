@@ -18,8 +18,12 @@ RUN_NAME_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{6}Z-[0-9
 
 
 def resolve_log_dir(config: LoggingConfig) -> Path:
-    """Return the application log root, per config or the platform log dir."""
-    return config.log_dir if config.log_dir is not None else Path(user_log_dir(config.app))
+    """Return the family's log directory: `<log root>/<family>`.
+
+    The log root is `config.log_dir` or the platform log directory for the app.
+    """
+    root = config.log_dir if config.log_dir is not None else Path(user_log_dir(config.app))
+    return root / config.family
 
 
 def new_run_name(now: datetime) -> str:

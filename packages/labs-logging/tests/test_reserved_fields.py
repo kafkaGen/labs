@@ -9,7 +9,7 @@ from labs_logging import LoggingConfig, bound_context, configure, get_logger
 
 
 def _events(tmp_path):
-    (main,) = tmp_path.glob("*/main.jsonl")
+    (main,) = (tmp_path / "a").glob("*/main.jsonl")
     return [json.loads(line) for line in main.read_text("utf-8").splitlines()]
 
 

@@ -17,7 +17,8 @@ labs-logging = { workspace = true }
 ```
 
 Import with `from labs_logging import ...`. `app` names the log directory and must be one
-safe path component. `family` is the logger-name prefix for your application. Importing
+safe path component. `family` is the logger-name prefix and the folder under it for one
+process. Use the top-level package name and `get_logger(__name__)`. Importing
 the package or calling `get_logger` opens no files and starts no threads. `configure`
 raises `AlreadyConfiguredError` while a runtime is active in the process, and
 `SetupError` when setup fails, for example because the root logger already has handlers.
@@ -28,13 +29,13 @@ A failed setup leaves nothing installed. After `shutdown()` you can configure ag
 | Field | Default | Meaning |
 |---|---|---|
 | `level`, `level_overrides` | `INFO`, `{}` | Family level and per-logger levels. |
-| `log_dir` | platform user log dir for `app` | Where run directories go. |
+| `log_dir` | platform user log dir for `app` | Root of the log tree. Each family gets `<log_dir>/<family>/`. |
 | `console`, `console_json`, `console_colors`, `console_stream` | on, off, auto, stderr | Console destination. Colors default to on only for a terminal. |
 | `file` | on | File destination. |
 | `synchronous` | `False` | `True` writes in the calling thread. `False` uses one listener thread and a bounded queue. |
 | `queue_size` | 10,000 | Background queue capacity. A full queue drops the new event and counts it in `Runtime.drops`. |
 | `max_bytes`, `backups` | 10 MiB, 3 | Size per file and rotated backups per run. |
-| `retain_runs` | 5 | Newest runs kept per application. |
+| `retain_runs` | 5 | Newest runs kept per family. |
 | `extra_handlers` | `[]` | Your own `logging.Handler` instances. The runtime flushes them on shutdown and never closes them. |
 
 `Runtime.healthy`, `Runtime.errors`, `Runtime.error_count`, and `Runtime.drops` report
@@ -51,7 +52,7 @@ POSIX path (`fcntl.flock`) has run in tests.
 
 ## Files
 
-Each launch creates `<log_dir>/<UTC start time>-<suffix>/` with `main.jsonl`, any
+Each launch creates `<log_dir>/<family>/<UTC start time>-<suffix>/` with `main.jsonl`, any
 `main.jsonl.N` backups, and a `lock` file. Two processes never share a file. With
 `backups=0`, reaching `max_bytes` discards the old contents and starts the same file
 again. The size limit is approximate: one oversized event is written whole.
@@ -95,12 +96,10 @@ large objects as fields. Logging is not a place for secrets: nothing is redacted
 
 ## Example
 
-`examples/dummy.py` emits parent and child events, a standard-library record, scoped
-context, and an exception. From the repository root:
+`examples/dummy_app/` is a small package that logs from two modules with
+`get_logger(__name__)`, plus a standard-library record, scoped context, and an
+exception. From the repository root:
 
 ```sh
-uv run --package labs-logging python packages/labs-logging/examples/dummy.py --sync
+cd packages/labs-logging/examples && uv run --package labs-logging python -m dummy_app --sync
 ```
-
-Omit `--sync` for background dispatch. `--log-dir PATH`, `--no-console`, and
-`--no-file` choose the destinations.

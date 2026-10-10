@@ -9,7 +9,7 @@ from labs_logging import LoggingConfig, bind_context, configure, get_logger
 
 
 def _events(tmp_path):
-    run = next(p for p in tmp_path.iterdir() if p.is_dir() and p.name != ".coord")
+    run = next(p for p in (tmp_path / "a").iterdir() if p.is_dir() and p.name != ".coord")
     return [json.loads(line) for line in (run / "main.jsonl").read_text().splitlines()]
 
 

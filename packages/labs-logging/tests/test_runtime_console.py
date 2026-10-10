@@ -28,7 +28,7 @@ def _cfg(tmp_path, stream=None, **overrides):
 
 
 def _events(tmp_path):
-    (main,) = tmp_path.glob("*/main.jsonl")
+    (main,) = (tmp_path / "a").glob("*/main.jsonl")
     return [json.loads(line) for line in main.read_text(encoding="utf-8").splitlines()]
 
 
@@ -92,7 +92,7 @@ def test_file_renders_both_event_kinds_with_timestamps(tmp_path, synchronous):
     finally:
         runtime.shutdown()
     structured, foreign = _events(tmp_path)
-    (run_name,) = [p.name for p in tmp_path.iterdir() if p.is_dir()]
+    (run_name,) = [p.name for p in (tmp_path / "a").iterdir() if p.is_dir()]
     assert structured["event"] == "structured"
     assert structured["context"] == {"n": 1}
     assert foreign["event"] == "foreign thing"
@@ -218,7 +218,8 @@ def test_existing_root_handler_is_a_setup_error_and_rolls_back(tmp_path):
     with pytest.raises(SetupError):
         configure(_cfg(tmp_path, io.StringIO()))
     assert logging.getLogger().handlers == [foreign]
-    assert [p for p in tmp_path.iterdir() if p.is_dir()] == []
+    # The family directory may not exist yet; glob on a missing path is empty.
+    assert [p for p in (tmp_path / "a").glob("*") if p.is_dir()] == []
     logging.getLogger().removeHandler(foreign)
     configure(_cfg(tmp_path, io.StringIO(), file=False)).shutdown()
 
@@ -383,7 +384,7 @@ def test_late_setup_failure_rolls_back_everything(tmp_path, monkeypatch):
     monkeypatch.setattr(runtime_mod, "cleanup_runs", boom)
     with pytest.raises(SetupError):
         configure(_cfg(tmp_path, io.StringIO(), level_overrides={"a.x": logging.DEBUG}))
-    assert [p for p in tmp_path.iterdir() if p.is_dir()] == []
+    assert [p for p in (tmp_path / "a").iterdir() if p.is_dir()] == []
     assert root.handlers == []
     assert root.level == root_level
     assert logging.getLogger("a").level == fam_level

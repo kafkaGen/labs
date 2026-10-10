@@ -151,7 +151,7 @@ def _record_coord_state(monkeypatch, log_dir):
 
 
 def test_configure_and_shutdown_clean_up_under_coord_lock(tmp_path, monkeypatch):
-    states = _record_coord_state(monkeypatch, tmp_path)
+    states = _record_coord_state(monkeypatch, tmp_path / "a")
     config = LoggingConfig(app="a", family="a", console=False, log_dir=tmp_path, retain_runs=2)
     runtime = configure(config)
     runtime.shutdown()
@@ -162,17 +162,37 @@ def test_setup_and_shutdown_keep_only_retained_runs(tmp_path):
     config = LoggingConfig(app="a", family="a", console=False, log_dir=tmp_path, retain_runs=2)
     for _ in range(4):
         configure(config).shutdown()
-    runs = [p for p in tmp_path.iterdir() if p.is_dir()]
+    runs = [p for p in (tmp_path / "a").iterdir() if p.is_dir()]
     assert len(runs) == 2
 
 
 def test_running_runtime_survives_another_runtimes_cleanup(tmp_path):
     first_cfg = LoggingConfig(app="a", family="a", console=False, log_dir=tmp_path, retain_runs=1)
     first = configure(first_cfg)
-    active = next(tmp_path.glob("*/lock")).parent
+    active = next((tmp_path / "a").glob("*/lock")).parent
     # Simulate a second process: its cleanup sees the first run's held lock.
     for i in range(3):
-        _make_run(tmp_path, i + 100)
-    cleanup_runs(tmp_path, retain=1, active_name="other")
+        _make_run(tmp_path / "a", i + 100)
+    cleanup_runs(tmp_path / "a", retain=1, active_name="other")
     assert active.exists()
     first.shutdown()
+
+
+def test_cleanup_in_one_family_never_deletes_another_familys_runs(tmp_path):
+    # One runtime per process, so run the families one after the other and repeat.
+    def names(family):
+        return {p.name for p in (tmp_path / family).iterdir() if p.is_dir()}
+
+    seen = {"one": set(), "two": set()}
+    for _ in range(3):
+        for family in seen:
+            config = LoggingConfig(
+                app="a", family=family, console=False, log_dir=tmp_path, retain_runs=1
+            )
+            configure(config).shutdown()
+            (run,) = names(family)
+            assert run not in seen[family]  # a new run replaced the previous one
+            seen[family].add(run)
+    # Each family kept exactly its newest run; the other family's cleanup left it alone.
+    assert names("one") == {max(seen["one"])}
+    assert names("two") == {max(seen["two"])}

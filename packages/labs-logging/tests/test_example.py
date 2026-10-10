@@ -5,21 +5,22 @@ from pathlib import Path
 
 import pytest
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "dummy.py"
+EXAMPLES = Path(__file__).parent.parent / "examples"
 
 
 @pytest.mark.parametrize("flags", [["--sync"], []])
 def test_dummy_app_runs_in_both_dispatch_modes(tmp_path, flags):
     result = subprocess.run(
-        [sys.executable, str(EXAMPLE), "--log-dir", str(tmp_path), *flags],
+        [sys.executable, "-m", "dummy_app", "--log-dir", str(tmp_path), *flags],
         capture_output=True,
         text=True,
         check=False,
+        cwd=EXAMPLES,
         timeout=60,
     )
     assert result.returncode == 0, result.stderr
     assert "Warning" not in result.stderr
-    (main,) = tmp_path.glob("*/main.jsonl")
+    (main,) = (tmp_path / "dummy_app").glob("*/main.jsonl")
     events = [json.loads(line) for line in main.read_text().splitlines()]
     assert [e["event"] for e in events] == [
         "running the demo",

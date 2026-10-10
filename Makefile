@@ -1,4 +1,4 @@
-.PHONY: help install lint format type-check pre-commit clean
+.PHONY: help install lint format type-check check test commit-check pre-commit clean
 
 help: ## Show this help message.
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -15,6 +15,9 @@ format: ## Format the code with ruff.
 
 type-check: ## Type-check the code with ty.
 	uv run ty check
+
+check: ## Run every pre-commit hook on all files. Fails if any hook fails or would change a file (used by CI).
+	uv run pre-commit run --all-files --show-diff-on-failure
 
 # test: ## Run the unit test suite with pytest.
 # 	uv run pytest

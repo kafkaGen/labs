@@ -18,6 +18,6 @@ jobs:
     steps:
       # A personal token, not GITHUB_TOKEN: PRs opened by GITHUB_TOKEN do not trigger CI,
       # so the required ci-success check would never report on release PRs.
-      - uses: googleapis/release-please-action@v5.0.0
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}

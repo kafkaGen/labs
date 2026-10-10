@@ -155,13 +155,13 @@ Any failure after the first side effect rolls everything back and raises `SetupE
 | `Runtime.healthy`, `errors`, `error_count`, `drops` | Python API | Failure and drop counters | Host health checks | Built |
 | Log envelope | JSON Lines | `timestamp`, `level`, `logger`, `application`, `run_id`, `process_id`, `event`, `context`, and `exception` when present. Keys sorted. Caller fields live under `context` | Collectors, humans | Built |
 | `extra_handlers` | Extension seam | Any `logging.Handler`. `record.msg` is the envelope dict | Cloud handlers | Built |
-| Log files | Filesystem | `<log_dir>/<UTC start>-<suffix>/main.jsonl`, backups `main.jsonl.N`, and `lock` | Collectors, humans | Built |
+| Log files | Filesystem | `<log_dir>/<family>/<UTC start>-<suffix>/main.jsonl`, backups `main.jsonl.N`, and `lock` | Collectors, humans | Built |
 
 ## Data stores
 
 | Store | Holds | Source of truth for | Retention | Status |
 |---|---|---|---|---|
-| Run directories under the log dir | The envelope lines of one process start, its backups, and its lock file | What that process logged, until deleted | Newest `retain_runs` runs, plus any run still active. Backups per run are bounded by `backups` and `max_bytes` | Built |
+| Run directories under `<log_dir>/<family>` | The envelope lines of one process start, its backups, and its lock file | What that process logged, until deleted | Newest `retain_runs` runs per family, plus any run still active. Backups per run are bounded by `backups` and `max_bytes` | Built |
 
 ## External dependencies
 
@@ -202,13 +202,13 @@ It runs inside the host process. It starts when the host calls `configure`. Impo
 **Assumed**
 
 - **Rotated backups default to 3.** The user set it. The design spec still says zero. Settled by the user updating the spec or leaving it.
-- **A directory with a `lock` file and a run-style name is a run.** Cleanup deletes such directories under the log dir. Settled by a host that puts its own directories there.
+- **A directory with a `lock` file and a run-style name is a run.** Cleanup deletes such directories under the family directory. Settled by a host that puts its own directories there.
 - **Windows works.** The `msvcrt` path is written, and nothing tests it. Settled by running the suite on Windows.
 
 ## Limits and non-goals
 
-- **One writer per file, one file per run:** processes never share a log file, so there is no combined timeline across processes. See `docs/adr/0001-isolate-log-files-by-run.md`.
-- **Storage is not a hard cap:** active older runs, backups and oversized events can exceed `retain_runs × (backups + 1) × max_bytes`.
+- **One writer per file, one file per run:** processes never share a log file, so there is no combined timeline across processes. See `docs/adr/0001-isolate-log-files-by-run.md` and `docs/adr/0002-separate-run-directories-by-family.md`.
+- **Storage is not a hard cap:** active older runs, backups and oversized events can exceed `retain_runs × (backups + 1) × max_bytes` per family.
 - **Delivery is best effort in background mode:** a full queue drops, and a missing `shutdown()` loses the queue.
 - **One runtime per process:** a second `configure` raises `AlreadyConfiguredError`, and a forked child must configure afresh.
 - **Not a log shipper or aggregator:** the package writes files and streams. Reading, shipping and searching belong to a collector or a custom handler.

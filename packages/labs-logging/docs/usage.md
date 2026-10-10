@@ -5,7 +5,8 @@ Short snippets for using `labs-logging` correctly. Reference: `README.md`.
 ## Rules
 
 - Call `configure` once, in the entrypoint of the process. Nowhere else.
-- Every other module calls `get_logger("<family>.<part>")` at module level. It does not import `LoggingConfig`.
+- Name the family after the top-level Python package, and call `get_logger(__name__)` at module level in every other module. The logger then falls under the family with nothing typed twice. Modules do not import `LoggingConfig`.
+- One process, one family. Two parts of an application that run as separate processes, such as an MCP server and an agent runner, each use their own family and their own config.
 - Pass data as keyword fields, not in the message: `log.info("saved", rows=3)`.
 - Never print to stdout in a stdio server. The console goes to stderr.
 - Call `configure` after `fork`, in the child. Never inherit a runtime.
@@ -34,7 +35,7 @@ def main() -> None:
 # my_app/tools.py
 from labs_logging import get_logger
 
-log = get_logger("my_app.tools")  # safe at import time, opens nothing
+log = get_logger(__name__)  # "my_app.tools", under family "my_app". Safe at import time
 
 log.info("tool called", tool="add", result=3)
 log.warning("slow", seconds=4.2)
@@ -91,8 +92,8 @@ LoggingConfig(app="a", family="a", console=False)  # file only
 LoggingConfig(app="a", family="a", backups=1, retain_runs=10, max_bytes=5_000_000)
 ```
 
-Files: `<log_dir>/<UTC start>-<suffix>/main.jsonl`, one directory per process start.
-Collectors tail `<log_dir>/*/main.jsonl`. Set `backups>=1` when one tails, because `backups=0` discards on rollover.
+Files: `<log_dir>/<family>/<UTC start>-<suffix>/main.jsonl`, one directory per process start.
+Collectors tail `<log_dir>/<family>/*/main.jsonl`. Set `backups>=1` when one tails, because `backups=0` discards on rollover.
 
 ## Custom destination
 

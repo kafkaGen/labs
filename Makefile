@@ -19,10 +19,15 @@ type-check: ## Type-check the code with ty.
 check: ## Run every pre-commit hook on all files. Fails if any hook fails or would change a file (used by CI).
 	uv run pre-commit run --all-files --show-diff-on-failure
 
-# test: ## Run the unit test suite with pytest.
-# 	uv run pytest
-# There are no tests yet. Add `pytest` as a dev dependency, write tests under
-# tests/, then uncomment this target (and add `test` to `pre-commit` below).
+PACKAGES := $(notdir $(wildcard packages/*))
+
+# Each package runs from its own directory so its [tool.pytest.ini_options] applies.
+# One root pytest run is not possible: every package has tests/__init__.py, and they collide.
+test: ## Run pytest with coverage for every package, or one with PKG=<name>.
+	@set -e; for p in $(or $(PKG),$(PACKAGES)); do \
+		echo "==> $$p"; \
+		(cd packages/$$p && uv run --package $$p --group dev --with pytest-cov pytest --cov=src --cov-report=term); \
+	done
 
 pre-commit: lint format type-check ## Run lint, format, and type-check (same checks as the pre-commit hooks).
 

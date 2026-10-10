@@ -20,7 +20,7 @@ ENVELOPE_KEYS = {
 
 
 def _main(tmp_path):
-    (main,) = tmp_path.glob("*/main.jsonl")
+    (main,) = (tmp_path / "a").glob("*/main.jsonl")
     return main
 
 
@@ -105,7 +105,7 @@ def test_file_failure_marks_unhealthy_and_console_keeps_working(tmp_path, synchr
     try:
         assert runtime.healthy
         # A directory in the file's place makes every write fail.
-        (next(tmp_path.glob("*/lock")).parent / "main.jsonl").mkdir()
+        (next((tmp_path / "a").glob("*/lock")).parent / "main.jsonl").mkdir()
         get_logger("a.x").info("still-visible")
         logging.getLogger("lib").info("also-visible")
     finally:

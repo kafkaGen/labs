@@ -90,7 +90,7 @@ def test_exception_outside_handler_does_not_lose_event(tmp_path):
         runtime.shutdown()
     assert sink.msgs[0]["event"] == "no active exception"
     assert "exception" not in sink.msgs[0]
-    assert "no active exception" in (next(tmp_path.glob("*/main.jsonl"))).read_text()
+    assert "no active exception" in (next((tmp_path / "a").glob("*/main.jsonl"))).read_text()
 
 
 def test_foreign_chain_survives_empty_exc_info_without_the_filter():

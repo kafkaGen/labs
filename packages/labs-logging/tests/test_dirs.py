@@ -1,13 +1,21 @@
 import datetime
+from pathlib import Path
 
 import pytest
+from platformdirs import user_log_dir
 
 from labs_logging.config import LoggingConfig
 from labs_logging.dirs import RunDir, new_run_name, resolve_log_dir
 
 
-def test_explicit_log_dir_wins(tmp_path):
-    assert resolve_log_dir(LoggingConfig(app="a", family="a", log_dir=tmp_path)) == tmp_path
+def test_explicit_log_dir_gets_the_family_appended(tmp_path):
+    config = LoggingConfig(app="a", family="fam", log_dir=tmp_path)
+    assert resolve_log_dir(config) == tmp_path / "fam"
+
+
+def test_default_log_dir_ends_with_the_family():
+    path = resolve_log_dir(LoggingConfig(app="a", family="fam"))
+    assert path == Path(user_log_dir("a")) / "fam"
 
 
 def test_new_run_name_is_fs_safe_and_sortable():

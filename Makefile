@@ -29,6 +29,9 @@ test: ## Run pytest with coverage for every package, or one with PKG=<name>.
 		(cd packages/$$p && uv run --package $$p --group dev --with pytest-cov pytest --cov=src --cov-report=term); \
 	done
 
+commit-check: ## Check commits in BASE..HEAD_REF are conventional. Usage: make commit-check BASE=origin/main
+	scripts/check-commits.sh $(or $(BASE),origin/main) $(or $(HEAD_REF),HEAD)
+
 pre-commit: lint format type-check ## Run lint, format, and type-check (same checks as the pre-commit hooks).
 
 clean: ## Remove caches, coverage reports, build artifacts, and logs (repo-wide).

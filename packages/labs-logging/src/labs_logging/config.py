@@ -35,7 +35,8 @@ class LoggingConfig(BaseModel):
         max_bytes: Approximate size of one log file. At least 1.
         backups: Rotated backups kept per run. 0 discards old contents.
         retain_runs: Newest runs kept per application. 0 or more.
-        extra_handlers: Your own `logging.Handler` instances.
+        extra_handlers: Your own `logging.Handler` instances. Anything else fails
+            validation.
 
     Raises:
         pydantic.ValidationError: A field fails validation, for example an unsafe
@@ -59,7 +60,7 @@ class LoggingConfig(BaseModel):
     max_bytes: int = Field(default=10 * 1024 * 1024, ge=1)
     backups: int = Field(default=3, ge=0)
     retain_runs: int = Field(default=5, ge=0)
-    extra_handlers: list[object] = Field(default_factory=list)
+    extra_handlers: list[logging.Handler] = Field(default_factory=list)
 
     @field_validator("app", "family")
     @classmethod

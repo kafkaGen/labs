@@ -413,11 +413,7 @@ class Runtime:
             self._owned.append(("console", _console_handler(config, builder)))
         if config.file:
             self._owned.append(("JsonFileHandler", _file_handler(config, self._run, builder)))
-        self._extra = [
-            (f"{type(h).__name__}[{i}]", h)
-            for i, h in enumerate(config.extra_handlers)
-            if isinstance(h, logging.Handler)
-        ]
+        self._extra = [(f"{type(h).__name__}[{i}]", h) for i, h in enumerate(config.extra_handlers)]
 
         fan_out = _FanOutHandler(
             [*self._owned, *self._extra],
@@ -513,9 +509,6 @@ def configure(config: LoggingConfig) -> Runtime:
                 "the root logger already has handlers; resolve competing logging "
                 "configuration first"
             )
-        bad = [h for h in config.extra_handlers if not isinstance(h, logging.Handler)]
-        if bad:
-            raise SetupError(f"extra_handlers must be logging.Handler instances, got {bad!r}")
 
         log_dir = resolve_log_dir(config)
         run: RunDir | None = None

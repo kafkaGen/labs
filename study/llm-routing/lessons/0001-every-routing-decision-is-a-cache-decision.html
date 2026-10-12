@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 1: Every routing decision is a cache decision</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+
+<nav class="crumbs">
+  Routing in LLM applications · Lesson 1 ·
+  <a href="../reference/prompt-cache-and-routing.html">Reference: prompt cache and routing</a>
+</nav>
+
+<h1>Every routing decision is a cache decision</h1>
+<p class="subtitle">One rule tells you whether a router keeps or throws away your prompt cache.</p>
+
+<div class="win">
+  <strong>Your win:</strong> by the end of this page, you can look at any routing move and predict
+  whether the Claude prompt cache survives it, and if not, where it breaks. Takes about 15 minutes.
+</div>
+
+<h2>What a router does</h2>
+
+<p>
+  Anthropic defines routing as a pattern that "classifies an input and directs it to a specialized
+  followup task".<span class="cite"><a href="#src-1">1</a></span> The followup can be a different
+  prompt, a different set of tools, or a different model. Their two examples are exactly the two kinds
+  in your mission: sending refund requests and tech-support questions to different prompts and tools
+  (<em>intent routing</em>), and sending easy questions to Haiku and hard ones to Sonnet
+  (<em>model routing</em>).<span class="cite"><a href="#src-1">1</a></span>
+</p>
+
+<p>
+  Every one of those followups changes something about the next request. The prompt cache is keyed on
+  exactly those things. So the router and the cache are always in tension, and this lesson is about
+  that tension.
+</p>
+
+<h2>What the cache is keyed on</h2>
+
+<p>
+  A prompt cache stores the model's computed state for the unchanged tokens at the start of a prompt,
+  so a later request with the same prefix can skip reprocessing them.<span class="cite"><a href="#src-3">3</a></span>
+  On the Claude API, a cache hit needs three things to match:
+</p>
+
+<ol>
+  <li><strong>The workspace.</strong> Caches are isolated per workspace on the Claude API.<span class="cite"><a href="#src-2">2</a></span></li>
+  <li><strong>The model.</strong> The cached state comes out of one model's weights, so a different model cannot read it. Switching models always starts cold.</li>
+  <li><strong>The exact prefix, in order.</strong> The prefix is built as <code>tools</code>, then <code>system</code>, then <code>messages</code>.<span class="cite"><a href="#src-2">2</a></span> One changed token invalidates everything after it.<span class="cite"><a href="#src-4">4</a></span></li>
+</ol>
+
+<div class="prefix">
+  <div class="tools">tools</div>
+  <div class="system">system</div>
+  <div class="messages">messages (turns 1…n)</div>
+  <div class="new">new turn</div>
+</div>
+<p class="figcaption">A request read left to right. Everything up to the dashed line can come from cache. The new turn is always fresh input.</p>
+
+<p>
+  Here is the rule to keep: <strong>a change invalidates its own segment and every segment to its right.</strong>
+  Anthropic's invalidation table says it directly: "Changes at each level invalidate that level and
+  all subsequent levels."<span class="cite"><a href="#src-2">2</a></span>
+</p>
+
+<div class="prefix">
+  <div class="tools">tools</div>
+  <div class="system broken">system (edited)</div>
+  <div class="messages broken">messages (turns 1…n)</div>
+  <div class="new">new turn</div>
+</div>
+<p class="figcaption">Edit the system prompt and the tools cache survives, but system and every message after it must be reprocessed.</p>
+
+<h3>Two exceptions worth knowing</h3>
+
+<ul>
+  <li>
+    <strong><code>tool_choice</code> only breaks the messages segment.</strong> Changing it leaves the
+    tools and system caches valid.<span class="cite"><a href="#src-2">2</a></span>
+  </li>
+  <li>
+    <strong>Appending is not editing.</strong> On models that support it, you can add new instructions
+    partway through by appending a <code>{"role": "system"}</code> message to <code>messages</code>
+    rather than editing the top-level <code>system</code> field. The cached prefix stays unchanged.<span class="cite"><a href="#src-2">2</a></span>
+  </li>
+</ul>
+
+<h2>Why it is worth caring</h2>
+
+<p>
+  Cache reads cost 0.1x the base input price on most Claude models, and 5-minute cache writes cost
+  1.25x.<span class="cite"><a href="#src-2">2</a></span> Manus, which runs agents at about 100 input
+  tokens per output token, calls KV-cache hit rate "the single most important metric for a
+  production-stage AI agent".<span class="cite"><a href="#src-4">4</a></span> A router that breaks the
+  cache at turn 30 makes you pay for all 30 turns again, at the higher write price.
+</p>
+
+<hr>
+
+<h2>Practice: predict the damage</h2>
+
+<p>
+  Each scenario is a conversation on Claude Sonnet that has been running for a while, with a warm cache.
+  The router does one thing before the next request. Pick what happens to that conversation's cache.
+</p>
+
+<div class="quiz" data-score-target="#score">
+
+  <div class="quiz-item" data-correct="system">
+    <p class="prompt"><strong>1.</strong> The router decides this turn is about hiking and replaces the top-level
+      <code>system</code> prompt with a "hiking specialist" persona. Same model, same tools.</p>
+    <div class="choices">
+      <button data-choice="hit">Full hit</button>
+      <button data-choice="messages">From messages</button>
+      <button data-choice="system">From system</button>
+      <button data-choice="miss">Full miss</button>
+    </div>
+    <div class="explain">Editing <code>system</code> breaks the system segment and everything to its right. The tools cache,
+      which sits to its left, survives. This is the most common way intent routing breaks a cache
+      without anyone noticing.</div>
+  </div>
+
+  <div class="quiz-item" data-correct="hit">
+    <p class="prompt"><strong>2.</strong> Before each turn, the app makes a separate Haiku call with a fixed classifier prompt
+      to pick a route. The main Sonnet conversation then gets only the new user turn appended.</p>
+    <div class="choices">
+      <button data-choice="hit">Full hit</button>
+      <button data-choice="messages">From messages</button>
+      <button data-choice="system">From system</button>
+      <button data-choice="miss">Full miss</button>
+    </div>
+    <div class="explain">The classifier is its own request, with its own prefix, on its own model. The main conversation's prefix is
+      untouched. One catch for the classifier itself: Haiku 4.5 won't cache any prompt shorter than 4,096 tokens,
+      so a short classifier prompt is never cached at all.<span class="cite"><a href="#src-2">2</a></span></div>
+  </div>
+
+  <div class="quiz-item" data-correct="messages">
+    <p class="prompt"><strong>3.</strong> The router forces the model to call <code>get_forecast</code> on this turn by setting
+      <code>tool_choice</code>. Nothing else changes.</p>
+    <div class="choices">
+      <button data-choice="hit">Full hit</button>
+      <button data-choice="messages">From messages</button>
+      <button data-choice="system">From system</button>
+      <button data-choice="miss">Full miss</button>
+    </div>
+    <div class="explain">This is one of the two exceptions. A <code>tool_choice</code> change invalidates only the messages
+      segment. In a long conversation, the messages segment is most of the tokens, so this still costs
+      real money.<span class="cite"><a href="#src-2">2</a></span></div>
+  </div>
+
+  <div class="quiz-item" data-correct="miss">
+    <p class="prompt"><strong>4.</strong> At turn 12, the router judges the question hard and sends the same history,
+      tools, and system prompt to Opus instead of Sonnet.</p>
+    <div class="choices">
+      <button data-choice="hit">Full hit</button>
+      <button data-choice="messages">From messages</button>
+      <button data-choice="system">From system</button>
+      <button data-choice="miss">Full miss</button>
+    </div>
+    <div class="explain">The prefix is byte-for-byte identical, but the cache belongs to Sonnet. Opus has no state for it, so it
+      reprocesses all 12 turns and pays the cache write price on top. Per-turn model routing in a long
+      conversation is the most expensive move on this page.</div>
+  </div>
+
+  <div class="quiz-item" data-correct="hit">
+    <p class="prompt"><strong>5.</strong> On a model that supports it, the router appends a <code>{"role": "system"}</code>
+      message to <code>messages</code>: "Answer as the hiking specialist."</p>
+    <div class="choices">
+      <button data-choice="hit">Full hit</button>
+      <button data-choice="messages">From messages</button>
+      <button data-choice="system">From system</button>
+      <button data-choice="miss">Full miss</button>
+    </div>
+    <div class="explain">This is the same intent as scenario 1 with the opposite outcome. The instruction is appended
+      after the cached prefix instead of edited into it, so only the new block is fresh input.<span class="cite"><a href="#src-2">2</a></span></div>
+  </div>
+
+  <div class="quiz-item" data-correct="miss">
+    <p class="prompt"><strong>6.</strong> The router adds two specialist tools to the <code>tools</code> array for this
+      turn only, then removes them next turn.</p>
+    <div class="choices">
+      <button data-choice="hit">Full hit</button>
+      <button data-choice="messages">From messages</button>
+      <button data-choice="system">From system</button>
+      <button data-choice="miss">Full miss</button>
+    </div>
+    <div class="explain"><code>tools</code> is the leftmost segment, so any change there invalidates everything.<span class="cite"><a href="#src-2">2</a></span>
+      Removing them next turn breaks it again. Manus hit this and stopped adding or removing tools
+      mid-task. They keep every tool defined and restrict which ones the model may pick
+      instead.<span class="cite"><a href="#src-4">4</a></span></div>
+  </div>
+
+</div>
+<p class="quiz-score" id="score"></p>
+
+<h2>What this means for router design</h2>
+
+<p>Compare scenarios 1 and 5, and scenarios 2 and 4. Three habits follow from the rule:</p>
+<ul>
+  <li><strong>Route in a separate request.</strong> A classifier call doesn't touch the conversation it routes.</li>
+  <li><strong>Put per-route variation at the end, not the front.</strong> Append instructions. Don't edit <code>tools</code> or <code>system</code>.</li>
+  <li><strong>Pick the model at a boundary.</strong> Choose it when a conversation or a delegated task starts, not on every turn.</li>
+</ul>
+<p>
+  The third habit raises the next question. If a hard subtask needs Opus, where does that call go so it
+  doesn't wreck the main conversation's cache? That is what
+  <a href="0002-where-a-routing-decision-belongs.html">lesson 2</a> covers: the layers where routing can live.
+</p>
+
+<div class="callout">
+  <strong>Retrieval check, from memory.</strong> Close this tab. On paper, draw the three segments in order
+  and write the one-line rule under them. Then list one routing move that keeps the cache and one that
+  breaks all of it. Do it again before lesson 2, without looking.
+</div>
+
+<h2>Primary source</h2>
+<p>
+  Read the <a href="https://docs.claude.com/en/docs/build-with-claude/prompt-caching">Claude prompt caching docs</a>,
+  specifically the sections "Structuring your prompt" and "What invalidates the cache". The table in the
+  second one is the whole lesson in a grid, plus cases this page skipped: images, thinking settings, and
+  effort.
+</p>
+
+<div class="ask">
+  Something unclear, or a scenario from your own agents you want to check? Ask me in chat. I'm your teacher
+  for this, and "what happens to the cache if…" questions are exactly the right kind.
+</div>
+
+<footer>
+  <h3>Sources</h3>
+  <ol>
+    <li id="src-1"><a href="https://www.anthropic.com/engineering/building-effective-agents">Anthropic, "Building effective agents"</a>, section "Workflow: Routing".</li>
+    <li id="src-2"><a href="https://docs.claude.com/en/docs/build-with-claude/prompt-caching">Claude API docs, "Prompt caching"</a>: prefix hierarchy, invalidation table, pricing, minimum lengths, workspace isolation.</li>
+    <li id="src-3"><a href="https://platform.openai.com/docs/guides/prompt-caching">OpenAI docs, "Prompt caching"</a>: definition of a reusable prefix.</li>
+    <li id="src-4"><a href="https://manus.im/blog/Context-Engineering-for-AI-Agents-Lessons-from-Building-Manus">Yichao Ji, "Context Engineering for AI Agents: Lessons from Building Manus"</a>: KV-cache hit rate, stable prefixes, "mask, don't remove".</li>
+  </ol>
+</footer>
+
+</main>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

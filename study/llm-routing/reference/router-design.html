@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reference: router design</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+
+<nav class="crumbs">
+  Routing in LLM applications · Reference ·
+  <a href="../lessons/0003-a-router-is-a-classifier-you-have-to-test.html">Lesson 3</a> ·
+  <a href="routing-layers.html">Routing layers</a> ·
+  <a href="prompt-cache-and-routing.html">Prompt cache and routing</a>
+</nav>
+
+<h1>Router design</h1>
+<p class="subtitle">Building and testing an application-layer router. Checked against the sources on 12 October 2026.</p>
+
+<h2>First: do you need one?</h2>
+<p>Route only when inputs fall into distinct categories, the classification can be done accurately, and a router beats one prompt on your evals.</p>
+
+<h2>Pick the shape</h2>
+<table>
+  <tr><th>Shape</th><th>Use when</th><th>Cost</th><th>Cache note</th></tr>
+  <tr><td><strong>Route before answering</strong> (RouteLLM)</td><td>You can judge difficulty from the question, but not cheaply check the answer</td><td>One classifier call per request</td><td>Decides once. Do it at a conversation or task boundary</td></tr>
+  <tr><td><strong>Cascade</strong> (FrugalGPT)</td><td>An automatic check on the answer exists (schema, tests, validator)</td><td>A second full call on each escalation</td><td>Each escalation is a cold cache on the next model. Best for short, independent requests</td></tr>
+</table>
+
+<h2>Classifier checklist</h2>
+<ul>
+  <li>Write category definitions with the boundary between neighbours spelled out.</li>
+  <li>Prompt: reasoning in <code>&lt;reasoning&gt;</code>, then one label in <code>&lt;intent&gt;</code>, plus a few examples.</li>
+  <li>Model: Haiku at <code>low</code> effort for simple, high-volume routing. Sonnet for many categories or deep expertise.</li>
+  <li>Many classes: a top-level classifier, then a sub-classifier per group.</li>
+  <li>Keep the classifier prompt fixed, so its own prefix can cache (check the model's minimum cacheable length).</li>
+  <li>Model routers: tune the threshold to your cost target. It sets how borderline questions are routed.</li>
+</ul>
+
+<h2>Evaluation</h2>
+<table>
+  <tr><th>Router type</th><th>Measure</th><th>Baseline</th></tr>
+  <tr><td>Intent router</td><td>Accuracy on a labelled set, cost per classification, response time, accuracy on a separate edge-case set</td><td>Thresholds set before testing (the guide's examples: 95% overall, 80% on edge cases)</td></tr>
+  <tr><td>Model router</td><td>Quality recovered at a given share of strong-model calls (RouteLLM: APGR, CPT)</td><td>A random router at the same share, which recovers about that share of the quality gap</td></tr>
+</table>
+
+<h2>Red flags</h2>
+<ul>
+  <li>Quality reported without cost, for a model router.</li>
+  <li>A test set with no ambiguous cases.</li>
+  <li>Misroutes fixed by upgrading the model before sharpening the categories.</li>
+  <li>A cascade escalating deep inside long conversations.</li>
+</ul>
+
+<footer>
+  Sources:
+  <a href="https://www.anthropic.com/engineering/building-effective-agents">Building effective agents</a>,
+  <a href="https://docs.claude.com/en/docs/about-claude/use-case-guides/ticket-routing">Claude ticket routing guide</a>,
+  <a href="https://arxiv.org/abs/2406.18665">RouteLLM</a>,
+  <a href="https://arxiv.org/abs/2305.05176">FrugalGPT</a>,
+  <a href="https://docs.claude.com/en/docs/build-with-claude/prompt-caching">Claude prompt caching</a>.
+</footer>
+
+</main>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reference: routing layers</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+
+<nav class="crumbs">
+  Routing in LLM applications · Reference ·
+  <a href="../lessons/0002-where-a-routing-decision-belongs.html">Lesson 2</a> ·
+  <a href="prompt-cache-and-routing.html">Prompt cache and routing</a>
+</nav>
+
+<h1>Routing layers</h1>
+<p class="subtitle">Who decides what, and what each layer must keep sticky. Checked against the sources on 10 October 2026.</p>
+
+<h2>Placement rule</h2>
+<p>Give each decision to the layer that has the information it needs.</p>
+
+<table>
+  <tr><th>Layer</th><th>Question it answers</th><th>Sees</th><th>Keep sticky</th><th>Examples</th></tr>
+  <tr>
+    <td><strong>Application</strong></td>
+    <td>What task is this, and who handles it?</td>
+    <td>Meaning, conversation, task state</td>
+    <td>Same model per conversation</td>
+    <td>Classifier call, orchestrator delegating to subagents</td>
+  </tr>
+  <tr>
+    <td><strong>Gateway</strong></td>
+    <td>Which deployment serves this model name now?</td>
+    <td>Model names, provider health, rate limits, prices</td>
+    <td>Same deployment or provider per conversation</td>
+    <td>LiteLLM, OpenRouter</td>
+  </tr>
+  <tr>
+    <td><strong>Server</strong></td>
+    <td>Which machine already holds this prefix?</td>
+    <td>KV cache state, GPU load</td>
+    <td>Same machine per conversation</td>
+    <td>vLLM prefix caching, Gateway API Inference Extension endpoint picker</td>
+  </tr>
+</table>
+
+<h2>Stickiness knobs</h2>
+<table>
+  <tr><th>Where</th><th>Knob</th><th>Notes</th></tr>
+  <tr><td>Application</td><td>Choose the model at conversation start or at delegation</td><td>Hard subtask: spawn a subagent with its own context on the stronger model</td></tr>
+  <tr><td>LiteLLM</td><td><code>optional_pre_call_checks: ["session_affinity"]</code> plus a session id header</td><td>Default <code>simple-shuffle</code> spreads one conversation across deployments</td></tr>
+  <tr><td>OpenRouter</td><td><code>session_id</code> (or <code>x-session-id</code>)</td><td>Sticky by default when caching pays. Expires after 10 minutes idle. Ignored if <code>provider.order</code> is set</td></tr>
+  <tr><td>OpenAI API</td><td><code>prompt_cache_key</code></td><td>A routing hint to machines holding the prefix, not a guarantee</td></tr>
+  <tr><td>Self-hosted vLLM</td><td><code>enable_prefix_caching=True</code> plus prefix-aware or session-pinned load balancing</td><td>Round robin scatters turns across replicas</td></tr>
+  <tr><td>Claude API</td><td>None at the server layer</td><td>Anthropic runs it. Your lever is a stable prefix in the same workspace</td></tr>
+</table>
+
+<h2>Costs to remember</h2>
+<ul>
+  <li>Multi-agent systems used about 15x the tokens of a chat in Anthropic's Research system.</li>
+  <li>Failing over to another provider starts with a cold cache.</li>
+  <li>Prefix caching speeds up prefill only, not generating output tokens (vLLM).</li>
+</ul>
+
+<footer>
+  Sources:
+  <a href="https://www.anthropic.com/engineering/multi-agent-research-system">Anthropic multi-agent research</a>,
+  <a href="https://docs.litellm.ai/docs/routing">LiteLLM routing</a>,
+  <a href="https://openrouter.ai/docs/features/prompt-caching">OpenRouter prompt caching</a>,
+  <a href="https://platform.openai.com/docs/guides/prompt-caching">OpenAI prompt caching</a>,
+  <a href="https://docs.vllm.ai/en/latest/features/automatic_prefix_caching.html">vLLM APC</a>,
+  <a href="https://gateway-api-inference-extension.sigs.k8s.io/">Gateway API Inference Extension</a>.
+</footer>
+
+</main>
+</body>
+</html>

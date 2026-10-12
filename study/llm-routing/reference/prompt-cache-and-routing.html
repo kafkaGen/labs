@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reference: prompt cache and routing</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+
+<nav class="crumbs">
+  Routing in LLM applications · Reference ·
+  <a href="../lessons/0001-every-routing-decision-is-a-cache-decision.html">Lesson 1</a>
+</nav>
+
+<h1>Prompt cache and routing</h1>
+<p class="subtitle">Claude API rules, on one page. Checked against the docs on 3 October 2026.</p>
+
+<h2>The cache key</h2>
+<p>A hit needs the same <strong>workspace</strong>, the same <strong>model</strong>, and the same <strong>exact prefix</strong> in the order <code>tools</code> → <code>system</code> → <code>messages</code>.</p>
+
+<div class="prefix">
+  <div class="tools">tools</div>
+  <div class="system">system</div>
+  <div class="messages">messages</div>
+  <div class="new">new turn</div>
+</div>
+<p class="figcaption">Rule: a change invalidates its own segment and every segment to its right.</p>
+
+<h2>Routing moves</h2>
+<table>
+  <tr><th>Routing move</th><th>Tools</th><th>System</th><th>Messages</th></tr>
+  <tr><td>Separate classifier request, conversation unchanged</td><td>✓</td><td>✓</td><td>✓</td></tr>
+  <tr><td>Append <code>{"role": "system"}</code> message (supported models)</td><td>✓</td><td>✓</td><td>✓</td></tr>
+  <tr><td>Change <code>tool_choice</code></td><td>✓</td><td>✓</td><td>✘</td></tr>
+  <tr><td>Add or remove images anywhere</td><td>✓</td><td>✓</td><td>✘</td></tr>
+  <tr><td>Change thinking settings or <code>effort</code></td><td>model-specific</td><td>model-specific</td><td>✘</td></tr>
+  <tr><td>Edit the top-level <code>system</code> prompt</td><td>✓</td><td>✘</td><td>✘</td></tr>
+  <tr><td>Toggle web search or citations</td><td>✓</td><td>✘</td><td>✘</td></tr>
+  <tr><td>Add, remove, or edit a tool definition</td><td>✘</td><td>✘</td><td>✘</td></tr>
+  <tr><td>Send the conversation to a different model</td><td>✘</td><td>✘</td><td>✘</td></tr>
+</table>
+
+<h2>Design habits</h2>
+<ul>
+  <li>Route in a separate request. The classifier never touches the conversation it routes.</li>
+  <li>Put per-route variation at the end. Append, don't edit.</li>
+  <li>Keep every tool defined, and restrict which ones the model may pick, instead of adding and removing tools (Manus: "mask, don't remove").</li>
+  <li>Choose the model at a boundary: conversation start or delegated task, never per turn.</li>
+  <li>No timestamps or per-request data in the prefix. Serialize JSON deterministically.</li>
+</ul>
+
+<h2>Numbers</h2>
+<table>
+  <tr><th>Item</th><th>Value</th></tr>
+  <tr><td>Cache read</td><td>0.1x base input on most models (per-model exceptions in the pricing table)</td></tr>
+  <tr><td>Cache write, 5-minute TTL</td><td>1.25x base input</td></tr>
+  <tr><td>Cache write, 1-hour TTL</td><td>2x base input</td></tr>
+  <tr><td>TTL clock</td><td>Starts at the request, refreshes free on each hit</td></tr>
+  <tr><td>Lookback window</td><td>20 blocks per breakpoint</td></tr>
+  <tr><td>Minimum cacheable prompt</td><td>512 tokens (Sonnet 5.5, Opus 5.5), 1,024 (Sonnet 5, Sonnet 4.6), 4,096 (Haiku 4.5)</td></tr>
+</table>
+
+<h2>Check it on a real response</h2>
+<p>Read <code>usage.cache_read_input_tokens</code> and <code>usage.cache_creation_input_tokens</code>. If both are 0, nothing was cached, often because the prompt was under the minimum length.</p>
+
+<footer>
+  Sources: <a href="https://docs.claude.com/en/docs/build-with-claude/prompt-caching">Claude prompt caching docs</a>,
+  <a href="https://manus.im/blog/Context-Engineering-for-AI-Agents-Lessons-from-Building-Manus">Manus on context engineering</a>.
+</footer>
+
+</main>
+</body>
+</html>

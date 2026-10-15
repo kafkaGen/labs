@@ -1,4 +1,4 @@
-.PHONY: help install lint format type-check pre-commit-verify pre-commit-fix test commit-check clean
+.PHONY: help install lint format type-check pre-commit-verify pre-commit-fix test conventional-commits-verify clean
 
 help: ## Show this help message.
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -29,8 +29,8 @@ test: ## Run pytest with coverage for every package, or one with PKG=<name>.
 		(cd packages/$$p && uv run --locked --package $$p --group dev pytest --cov=src --cov-report=term); \
 	done
 
-commit-check: ## Check commits in BASE..HEAD_REF are conventional. Usage: make commit-check BASE=origin/main
-	scripts/check-commits.sh $(or $(BASE),origin/main) $(or $(HEAD_REF),HEAD)
+conventional-commits-verify: ## Check commits in BASE..HEAD_REF are conventional. Usage: make conventional-commits-verify BASE=origin/main
+	scripts/verify-conventional-commits.sh $(or $(BASE),origin/main) $(or $(HEAD_REF),HEAD)
 
 pre-commit-fix: lint format type-check ## Fix locally: lint, format, and type-check (rewrites files).
 

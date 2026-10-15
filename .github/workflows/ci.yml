@@ -78,8 +78,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Informational: not in ci-success.needs, so a bad message shows red but never blocks a merge.
-  commit-msg-check:
-    name: commit-msg-check
+  conventional-commits:
+    name: conventional-commits
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -91,7 +91,7 @@ jobs:
       - env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: make commit-check BASE="$BASE_SHA" HEAD_REF="$HEAD_SHA"
+        run: make conventional-commits-verify BASE="$BASE_SHA" HEAD_REF="$HEAD_SHA"
 
   dependency-review:
     name: dependency-review

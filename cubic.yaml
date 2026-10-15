@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://cubic.dev/schema/cubic-repository-config.schema.json
+version: 1
+
+reviews:
+  # PRs from outside the repo wait for a manual `@cubic-dev-ai review`.
+  external_contributors_require_manual_review: true
+  ignore:
+    files:
+      - uv.lock
+      - study/**
+    # Dependabot version bumps are covered by CI.
+    head_branches:
+      - dependabot/**

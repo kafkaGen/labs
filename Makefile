@@ -1,4 +1,4 @@
-.PHONY: help install lint format type-check check test commit-check pre-commit clean
+.PHONY: help install lint format type-check pre-commit-verify pre-commit-fix test commit-check clean
 
 help: ## Show this help message.
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -16,7 +16,7 @@ format: ## Format the code with ruff.
 type-check: ## Type-check the code with ty.
 	uv run ty check
 
-check: ## Run every pre-commit hook on all files. Fails if any hook fails or would change a file (used by CI).
+pre-commit-verify: ## Run every pre-commit hook on all files. Fails if any hook fails or modifies a file (used by CI).
 	uv run pre-commit run --all-files --show-diff-on-failure
 
 PACKAGES := $(notdir $(wildcard packages/*))
@@ -32,7 +32,7 @@ test: ## Run pytest with coverage for every package, or one with PKG=<name>.
 commit-check: ## Check commits in BASE..HEAD_REF are conventional. Usage: make commit-check BASE=origin/main
 	scripts/check-commits.sh $(or $(BASE),origin/main) $(or $(HEAD_REF),HEAD)
 
-pre-commit: lint format type-check ## Run lint, format, and type-check (same checks as the pre-commit hooks).
+pre-commit-fix: lint format type-check ## Fix locally: lint, format, and type-check (rewrites files).
 
 clean: ## Remove caches, coverage reports, build artifacts, and logs (repo-wide).
 	find . -path ./.venv -prune -o -path ./.git -prune -o -type d \( \

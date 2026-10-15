@@ -29,7 +29,10 @@ test: ## Run pytest with coverage for every package, or one with PKG=<name>.
 pre-commit-verify: ## Run every pre-commit hook on all files. Fails if any hook fails or modifies a file (used by CI).
 	uv run pre-commit run --all-files --show-diff-on-failure
 
-pre-commit-fix: lint format type-check ## Fix locally: lint, format, and type-check (rewrites files).
+pre-commit-fix: ## Fix locally: apply ruff lint fixes and formatting, then type-check (rewrites files).
+	uv run ruff check --fix .
+	uv run ruff format .
+	uv run ty check
 
 conventional-commits-verify: ## Check commits in BASE..HEAD_REF are conventional. Usage: make conventional-commits-verify BASE=origin/main
 	scripts/verify-conventional-commits.sh $(or $(BASE),origin/main) $(or $(HEAD_REF),HEAD)

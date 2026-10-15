@@ -74,7 +74,7 @@ jobs:
           cd "packages/$PKG"
           {
             echo "### Coverage: $PKG"
-            uvx coverage report --format=markdown
+            uv run --locked --package "$PKG" coverage report --format=markdown
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Informational: not in ci-success.needs, so a bad message shows red but never blocks a merge.
@@ -117,6 +117,8 @@ jobs:
       scan-args: |-
         --lockfile=uv.lock
       fail-on-vuln: false
+      # Fork PRs get a read-only token, so the SARIF upload would fail. Scan without uploading.
+      upload-sarif: ${{ github.event.pull_request.head.repo.fork != true }}
 
   zizmor:
     name: zizmor

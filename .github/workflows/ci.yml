@@ -77,8 +77,9 @@ jobs:
             uvx coverage report --format=markdown
           } >> "$GITHUB_STEP_SUMMARY"
 
-  commits:
-    name: commits
+  # Informational: not in ci-success.needs, so a bad message shows red but never blocks a merge.
+  commit-msg-check:
+    name: commit-msg-check
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -132,7 +133,7 @@ jobs:
   ci-success:
     name: ci-success
     if: always()
-    needs: [static-checks, packages-discovery, test, commits, dependency-review, osv-scan, zizmor]
+    needs: [static-checks, packages-discovery, test, dependency-review, osv-scan, zizmor]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

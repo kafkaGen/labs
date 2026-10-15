@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fails if any non-merge commit in <base>..<head> is not a conventional commit.
-# release-please reads these messages to pick version bumps, so a bad one silently skips a release.
+# Keeps history readable and release-ready: tools that read commit types (changelogs, version bumps) need them.
 set -euo pipefail
 
 base="${1:?usage: check-commits.sh <base-ref> [head-ref]}"

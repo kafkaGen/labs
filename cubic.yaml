@@ -1,5 +1,4 @@
 # yaml-language-server: $schema=https://cubic.dev/schema/cubic-repository-config.schema.json
-# Only settings that differ from the dashboard defaults live here.
 version: 1
 
 reviews:
@@ -12,6 +11,3 @@ reviews:
     # Dependabot version bumps are covered by CI.
     head_branches:
       - dependabot/**
-
-issues:
-  auto_fix: "off"

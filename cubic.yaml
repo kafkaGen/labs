@@ -1,10 +1,8 @@
 # yaml-language-server: $schema=https://cubic.dev/schema/cubic-repository-config.schema.json
+# Only settings that differ from the dashboard defaults live here.
 version: 1
 
 reviews:
-  sensitivity: high
-  # Draft PRs get no automatic review. Marking one ready triggers the first review.
-  check_drafts: false
   # PRs from outside the repo wait for a manual `@cubic-dev-ai review`.
   external_contributors_require_manual_review: true
   ignore:
@@ -14,11 +12,6 @@ reviews:
     # Dependabot version bumps are covered by CI.
     head_branches:
       - dependabot/**
-
-pr_descriptions:
-  # Cubic always writes the description, even when the author wrote one.
-  generate: true
-  skip_if_author_description: false
 
 issues:
   auto_fix: "off"

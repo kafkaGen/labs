@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  check:
-    name: check
+  static-checks:
+    name: static-checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -31,17 +31,17 @@ jobs:
       - run: make install
       - run: make pre-commit-verify
 
-  discover:
-    name: discover
+  packages-discovery:
+    name: packages-discovery
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:
-      packages: ${{ steps.list.outputs.packages }}
+      packages: ${{ steps.list-packages.outputs.packages }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - id: list
+      - id: list-packages
         run: |
           packages="$(for f in packages/*/pyproject.toml; do basename "$(dirname "$f")"; done | jq -R . | jq -cs .)"
           echo "packages=$packages" >> "$GITHUB_OUTPUT"
@@ -49,13 +49,13 @@ jobs:
 
   test:
     name: test (${{ matrix.package }})
-    needs: discover
+    needs: packages-discovery
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        package: ${{ fromJSON(needs.discover.outputs.packages) }}
+        package: ${{ fromJSON(needs.packages-discovery.outputs.packages) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -132,7 +132,7 @@ jobs:
   ci-success:
     name: ci-success
     if: always()
-    needs: [check, discover, test, commits, dependency-review, osv-scan, zizmor]
+    needs: [static-checks, packages-discovery, test, commits, dependency-review, osv-scan, zizmor]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

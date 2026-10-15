@@ -26,7 +26,7 @@ PACKAGES := $(notdir $(wildcard packages/*))
 test: ## Run pytest with coverage for every package, or one with PKG=<name>.
 	@set -e; for p in $(or $(PKG),$(PACKAGES)); do \
 		echo "==> $$p"; \
-		(cd packages/$$p && uv run --package $$p --group dev --with pytest-cov pytest --cov=src --cov-report=term); \
+		(cd packages/$$p && uv run --locked --package $$p --group dev pytest --cov=src --cov-report=term); \
 	done
 
 commit-check: ## Check commits in BASE..HEAD_REF are conventional. Usage: make commit-check BASE=origin/main

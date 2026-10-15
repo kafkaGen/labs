@@ -132,7 +132,7 @@ jobs:
   ci-success:
     name: ci-success
     if: always()
-    needs: [check, discover, test, commits, dependency-review, zizmor]
+    needs: [check, discover, test, commits, dependency-review, osv-scan, zizmor]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

@@ -7,6 +7,11 @@ base="${1:?usage: check-commits.sh <base-ref> [head-ref]}"
 head="${2:-HEAD}"
 pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._-]+\))?!?: .+'
 
+commits="$(git log --no-merges --format='%h %s' "$base..$head")"
+if [[ -z "$commits" ]]; then
+  exit 0
+fi
+
 status=0
 while IFS= read -r line; do
   sha="${line%% *}"
@@ -15,6 +20,6 @@ while IFS= read -r line; do
     echo "::error::$sha is not a conventional commit: $subject"
     status=1
   fi
-done < <(git log --no-merges --format='%h %s' "$base..$head")
+done <<<"$commits"
 
 exit "$status"

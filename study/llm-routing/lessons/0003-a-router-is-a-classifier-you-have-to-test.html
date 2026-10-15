@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 3: A router is a classifier you have to test</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+
+<nav class="crumbs">
+  Routing in LLM applications · Lesson 3 ·
+  <a href="0002-where-a-routing-decision-belongs.html">Lesson 2</a> ·
+  <a href="../reference/router-design.html">Reference: router design</a> ·
+  <a href="../reference/routing-layers.html">Reference: routing layers</a>
+</nav>
+
+<h1>A router is a classifier you have to test</h1>
+<p class="subtitle">How to build an application-layer router, and how to tell if it beats picking at random.</p>
+
+<div class="win">
+  <strong>Your win:</strong> you can pick the right shape of router for a job, say what to fix when it misroutes,
+  and judge it against the baseline it has to beat. Takes about 15 minutes.
+</div>
+
+<h2>Warm-up: lessons 1 and 2, from memory</h2>
+<div class="warmup">
+<div class="quiz" data-score-target="#warmup-score">
+
+  <div class="quiz-item" data-correct="gateway">
+    <p class="prompt"><strong>W1.</strong> You pass a <code>session_id</code> on every turn so a conversation stays on one
+      provider. Which layer reads it?</p>
+    <div class="choices">
+      <button data-choice="app">Application layer</button>
+      <button data-choice="gateway">Gateway layer</button>
+      <button data-choice="server">Server layer</button>
+    </div>
+    <div class="explain">OpenRouter and LiteLLM both use a session id to pin a conversation to one provider or deployment, so its
+      cache stays warm.<span class="cite"><a href="#src-6">6</a></span></div>
+  </div>
+
+  <div class="quiz-item" data-correct="hit">
+    <p class="prompt"><strong>W2.</strong> A Sonnet lead agent hands a hard subtask to a new Opus subagent with its own context.
+      What happens to the lead conversation's cache?</p>
+    <div class="choices">
+      <button data-choice="hit">Full hit</button>
+      <button data-choice="messages">From messages</button>
+      <button data-choice="system">From system</button>
+      <button data-choice="miss">Full miss</button>
+    </div>
+    <div class="explain">The subagent is a separate conversation. The lead's model and prefix don't change, so its cache
+      survives. This is how you route to a stronger model at a boundary.</div>
+  </div>
+
+  <div class="quiz-item" data-correct="miss">
+    <p class="prompt"><strong>W3.</strong> A gateway's automatic model router picks a different model on turn 7 of a
+      conversation.</p>
+    <div class="choices">
+      <button data-choice="hit">Full hit</button>
+      <button data-choice="messages">From messages</button>
+      <button data-choice="system">From system</button>
+      <button data-choice="miss">Full miss</button>
+    </div>
+    <div class="explain">A new model has no cache for this conversation. OpenRouter's docs warn about exactly this: its Auto
+      Router reuses the earlier model only "on a best-effort basis".<span class="cite"><a href="#src-6">6</a></span></div>
+  </div>
+
+</div>
+<p class="quiz-score" id="warmup-score"></p>
+</div>
+
+<h2>Two shapes of model router</h2>
+
+<table>
+  <tr><th></th><th>Route before answering</th><th>Cascade</th></tr>
+  <tr><td><strong>How</strong></td><td>A cheap classifier picks a model, then that model answers once.</td><td>The cheap model answers. A check decides if the answer is reliable. If not, the next model tries.</td></tr>
+  <tr><td><strong>Known from</strong></td><td>RouteLLM<span class="cite"><a href="#src-3">3</a></span></td><td>FrugalGPT<span class="cite"><a href="#src-4">4</a></span></td></tr>
+  <tr><td><strong>Needs</strong></td><td>A way to predict difficulty from the question alone</td><td>A cheap way to check an answer after it exists</td></tr>
+  <tr><td><strong>Cost</strong></td><td>One classifier call on every request</td><td>Paying twice whenever it escalates</td></tr>
+</table>
+
+<p>
+  The choice comes down to one question: <strong>is it easier to judge the question or the answer?</strong>
+  If an answer can be checked automatically, for example it must pass a JSON schema or a test, a cascade
+  only escalates when it has to. If the answer is a judgement call nobody can cheaply check, you have to
+  predict difficulty up front.
+</p>
+
+<p>
+  A cascade has a cost lesson 1 predicts. An escalation sends the whole context to a second model, which has no
+  cache for it. On a short single query that's cheap. Deep into a long conversation, every escalation pays for
+  the full history again.
+</p>
+
+<h2>Build the classifier well</h2>
+<p>Anthropic's ticket-routing guide is the most practical source here.<span class="cite"><a href="#src-2">2</a></span> Four points carry most of the weight:</p>
+<ul>
+  <li><strong>Categories first.</strong> Claude's routing accuracy is "directly proportional to how well-defined your system's categories are".<span class="cite"><a href="#src-2">2</a></span> Fix fuzzy categories before you reach for a bigger model.</li>
+  <li><strong>Reasoning, then label.</strong> The guide's prompt asks for reasoning in <code>&lt;reasoning&gt;</code> tags, then one label in <code>&lt;intent&gt;</code>, with a few examples.<span class="cite"><a href="#src-2">2</a></span></li>
+  <li><strong>Smallest model that passes.</strong> Haiku at <code>low</code> effort suits simple, high-volume classification. Move to Sonnet for many categories or deep domain knowledge.<span class="cite"><a href="#src-2">2</a></span></li>
+  <li><strong>Many classes, split the tree.</strong> A top-level classifier picks a broad group, and each group has its own sub-classifier.<span class="cite"><a href="#src-2">2</a></span></li>
+</ul>
+
+<p>
+  For model routing, RouteLLM turns the router's output into a decision with a <strong>threshold</strong>. The router
+  estimates how likely the strong model is to win, and the threshold sets how sure it must be before paying for
+  the strong model. Moving the threshold trades cost for quality.<span class="cite"><a href="#src-3">3</a></span>
+  The threshold is where you decide what borderline questions cost you.
+</p>
+
+<h2>Test it against the right baseline</h2>
+
+<p>
+  A router that sends everything to the strong model gets perfect quality and saves nothing. So quality alone
+  says nothing about a model router.<span class="cite"><a href="#src-3">3</a></span> RouteLLM measures quality
+  <em>at a given share of strong-model calls</em> and compares it with a <strong>random router</strong> at the same
+  share.<span class="cite"><a href="#src-3">3</a></span>
+</p>
+
+<div class="callout">
+  <strong>Why random is the bar.</strong> A random router that sends 40% of questions to the strong model
+  recovers, on average, about 40% of the quality gap between the two models. A router is worth its classifier
+  call only if it recovers much more than that at the same cost. In RouteLLM's own tests, two of their
+  classifiers performed "close to random" until they were given better training data.<span class="cite"><a href="#src-3">3</a></span>
+</div>
+
+<p>For intent routing, Anthropic's guide measures three things on a labelled test set, against thresholds you set before you start:<span class="cite"><a href="#src-2">2</a></span></p>
+<ul>
+  <li><strong>Accuracy</strong>, for example 95% out of 100 tests.</li>
+  <li><strong>Cost per classification.</strong></li>
+  <li><strong>Response time.</strong></li>
+</ul>
+<p>The guide also says to keep a separate edge-case set and aim for at least 80% on it.<span class="cite"><a href="#src-2">2</a></span></p>
+
+<p>
+  Finally, check whether you need a router at all. Anthropic's advice is to add complexity "only when it
+  demonstrably improves outcomes".<span class="cite"><a href="#src-1">1</a></span> If one prompt already passes your
+  evals, a router only adds a call that can be wrong.
+</p>
+
+<hr>
+
+<h2>Practice: design and judge</h2>
+
+<div class="quiz" data-score-target="#score">
+
+  <div class="quiz-item" data-correct="cascade">
+    <p class="prompt"><strong>1.</strong> An agent turns requests into tool-call arguments that must pass a JSON schema. Most
+      requests are easy. Which shape fits?</p>
+    <div class="choices">
+      <button data-choice="before">Route before answering</button>
+      <button data-choice="cascade">Cascade cheap to strong</button>
+      <button data-choice="strong">Always use strong</button>
+    </div>
+    <div class="explain">The schema is a free, automatic check on the answer. Let the cheap model try and escalate only on a
+      failed check. That is FrugalGPT's pattern: later models are called only when the earlier answer is "deemed
+      insufficiently reliable".<span class="cite"><a href="#src-4">4</a></span></div>
+  </div>
+
+  <div class="quiz-item" data-correct="sharpen">
+    <p class="prompt"><strong>2.</strong> A Haiku classifier with routes <code>forecast</code>, <code>travel</code>, and
+      <code>other</code> keeps mixing up forecast and travel questions. What do you fix first?</p>
+    <div class="choices">
+      <button data-choice="sonnet">Move classifier to Sonnet</button>
+      <button data-choice="sharpen">Sharpen the category definitions</button>
+      <button data-choice="cascade">Add an escalation cascade</button>
+    </div>
+    <div class="explain">Confusion between two specific routes points at their definitions. Accuracy tracks how well-defined the
+      categories are.<span class="cite"><a href="#src-2">2</a></span> Write the boundary down, with an example on each side.
+      A bigger model would only guess better at a line you never drew.</div>
+  </div>
+
+  <div class="quiz-item" data-correct="random">
+    <p class="prompt"><strong>3.</strong> Your model router sends 60% of questions to the strong model and recovers 60% of the
+      quality gap between the two models. Is it earning its keep?</p>
+    <div class="choices">
+      <button data-choice="yes">Yes, it helps</button>
+      <button data-choice="random">No, matches random</button>
+      <button data-choice="unknown">Can't tell yet</button>
+    </div>
+    <div class="explain">A random router at 60% strong calls recovers about 60% of the gap on average. Yours costs the same
+      and recovers the same, plus a classifier call on every request. It's doing nothing.<span class="cite"><a href="#src-3">3</a></span></div>
+  </div>
+
+  <div class="quiz-item" data-correct="miss">
+    <p class="prompt"><strong>4.</strong> A cascade runs each turn on Haiku and escalates to Sonnet when a check fails. The first
+      escalation happens at turn 25. What does the Sonnet call find in its cache?</p>
+    <div class="choices">
+      <button data-choice="hit">Full hit</button>
+      <button data-choice="messages">From messages</button>
+      <button data-choice="system">From system</button>
+      <button data-choice="miss">Full miss</button>
+    </div>
+    <div class="explain">Sonnet has never seen this conversation, so all 25 turns are new input at the cache-write price.<span class="cite"><a href="#src-5">5</a></span>
+      Cascades are cheapest on short, independent requests. In long conversations, choose the model at a boundary.</div>
+  </div>
+
+  <div class="quiz-item" data-correct="edge">
+    <p class="prompt"><strong>5.</strong> Your intent router scores 98% on 100 labelled test cases. All of them are clear,
+      typical requests. What's missing before you trust it?</p>
+    <div class="choices">
+      <button data-choice="edge">Add edge cases</button>
+      <button data-choice="threshold">Raise the threshold</button>
+      <button data-choice="ship">Ship it now</button>
+    </div>
+    <div class="explain">Clear cases are where every router does well. Anthropic's guide keeps a separate edge-case set with its
+      own target of at least 80%.<span class="cite"><a href="#src-2">2</a></span> The ambiguous requests are the ones a router
+      exists to handle.</div>
+  </div>
+
+  <div class="quiz-item" data-correct="before">
+    <p class="prompt"><strong>6.</strong> Users ask for travel advice. Difficulty varies a lot, and nothing can cheaply check
+      whether an answer is good. Which shape fits?</p>
+    <div class="choices">
+      <button data-choice="before">Route before answering</button>
+      <button data-choice="cascade">Cascade cheap to strong</button>
+      <button data-choice="strong">Always use strong</button>
+    </div>
+    <div class="explain">A cascade needs an answer check, and there isn't one. Predict difficulty from the question, RouteLLM
+      style, and tune the threshold to your budget.<span class="cite"><a href="#src-3">3</a></span> "Always use strong" is the
+      fallback if the router can't beat random.</div>
+  </div>
+
+  <div class="quiz-item" data-correct="skip">
+    <p class="prompt"><strong>7.</strong> One prompt already handles all three question types at 96% on your evals. A teammate
+      wants to add an intent router with one specialist prompt per type.</p>
+    <div class="choices">
+      <button data-choice="skip">Skip the router</button>
+      <button data-choice="add">Add the router</button>
+      <button data-choice="cascade">Add a cascade</button>
+    </div>
+    <div class="explain">A router adds a call, latency, and a new way to fail. Add it only when it "demonstrably improves
+      outcomes".<span class="cite"><a href="#src-1">1</a></span> If the eval later shows one type dragging the score down,
+      revisit it then.</div>
+  </div>
+
+</div>
+<p class="quiz-score" id="score"></p>
+
+<h2>What to take away</h2>
+<ul>
+  <li><strong>Pick the shape by what you can judge.</strong> If you can check the answer, cascade. If you can only judge the question, route before answering.</li>
+  <li><strong>Fix categories before models.</strong> Sharp boundaries, reasoning before the label, and the smallest model that passes.</li>
+  <li><strong>Beat random at equal cost, or remove the router.</strong> Test quality and cost together, on a separate edge-case set too.</li>
+</ul>
+<p>
+  <a href="0004-see-the-cache-rules-in-real-numbers.html">Lesson 4</a> is hands-on. You'll run a short routed conversation on Haiku and read the <code>usage</code> fields to
+  see the cache rules from lesson 1 in real numbers.
+</p>
+
+<div class="callout">
+  <strong>Retrieval check, from memory.</strong> Close this tab. Write the one question that picks between a router
+  and a cascade. Then write the baseline a model router must beat, and why.
+</div>
+
+<h2>Primary source</h2>
+<p>
+  Read Anthropic's <a href="https://docs.claude.com/en/docs/about-claude/use-case-guides/ticket-routing">ticket routing guide</a>,
+  especially "Establish success criteria" and "Evaluate your prompt". It is a full worked router with its
+  evaluation. For the model-routing side, read the abstract and section 3 of
+  <a href="https://arxiv.org/abs/2406.18665">RouteLLM</a>, where the random baseline and the metrics are defined.
+</p>
+
+<div class="ask">
+  Want to sketch a router for one of your own agents and check it against these rules? Paste the routes and a few
+  example requests in chat and we'll design the categories and the test set together.
+</div>
+
+<footer>
+  <h3>Sources</h3>
+  <ol>
+    <li id="src-1"><a href="https://www.anthropic.com/engineering/building-effective-agents">Anthropic, "Building effective agents"</a>: add complexity only when it improves outcomes.</li>
+    <li id="src-2"><a href="https://docs.claude.com/en/docs/about-claude/use-case-guides/ticket-routing">Claude docs, "Ticket routing"</a>: categories, prompt shape, model choice, hierarchical classifiers, success criteria, evaluation.</li>
+    <li id="src-3"><a href="https://arxiv.org/abs/2406.18665">Ong et al., "RouteLLM: Learning to Route LLMs with Preference Data" (2024)</a>: threshold, random-router baseline, APGR and CPT metrics.</li>
+    <li id="src-4"><a href="https://arxiv.org/abs/2305.05176">Chen, Zaharia, Zou, "FrugalGPT" (2023)</a>: LLM cascades.</li>
+    <li id="src-5"><a href="https://docs.claude.com/en/docs/build-with-claude/prompt-caching">Claude API docs, "Prompt caching"</a>: cache-write pricing.</li>
+    <li id="src-6"><a href="https://openrouter.ai/docs/features/prompt-caching">OpenRouter docs, "Prompt caching"</a>: sticky routing, <code>session_id</code>, Auto Router stickiness.</li>
+  </ol>
+</footer>
+
+</main>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

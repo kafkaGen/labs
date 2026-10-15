@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 4: See the cache rules in real numbers</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+
+<nav class="crumbs">
+  Routing in LLM applications · Lesson 4 ·
+  <a href="0003-a-router-is-a-classifier-you-have-to-test.html">Lesson 3</a> ·
+  <a href="../reference/prompt-cache-and-routing.html">Reference: prompt cache and routing</a>
+</nav>
+
+<h1>See the cache rules in real numbers</h1>
+<p class="subtitle">Predict what eight routing moves do to the cache, then run them against the Claude API and check.</p>
+
+<div class="win">
+  <strong>Your win:</strong> you read <code>cache_read_input_tokens</code> and
+  <code>cache_creation_input_tokens</code> on real responses and explain every number from the rule in
+  lesson 1. Takes about 20 minutes and well under $0.15 of API spend.
+</div>
+
+<h2>Warm-up: lesson 3, from memory</h2>
+<div class="warmup">
+<div class="quiz" data-score-target="#warmup-score">
+
+  <div class="quiz-item" data-correct="cascade">
+    <p class="prompt"><strong>W1.</strong> Every answer must pass a validator before it's used, and most requests are easy.
+      Which shape of model router fits?</p>
+    <div class="choices">
+      <button data-choice="before">Route before answering</button>
+      <button data-choice="cascade">Cascade cheap to strong</button>
+      <button data-choice="strong">Always use strong</button>
+    </div>
+    <div class="explain">You can check the answer for free, so let the cheap model try and escalate only on a failed check.<span class="cite"><a href="#src-3">3</a></span></div>
+  </div>
+
+  <div class="quiz-item" data-correct="random">
+    <p class="prompt"><strong>W2.</strong> A model router sends 30% of questions to the strong model and recovers 30% of the
+      quality gap. Is it earning its keep?</p>
+    <div class="choices">
+      <button data-choice="yes">Yes, it helps</button>
+      <button data-choice="random">No, matches random</button>
+      <button data-choice="unknown">Can't tell yet</button>
+    </div>
+    <div class="explain">A random router at 30% strong calls recovers about 30% of the gap. Same result, plus a classifier call on every request.<span class="cite"><a href="#src-4">4</a></span></div>
+  </div>
+
+</div>
+<p class="quiz-score" id="warmup-score"></p>
+</div>
+
+<h2>The lab</h2>
+
+<p>
+  The script <a href="../assets/cache_lab.py"><code>assets/cache_lab.py</code></a> builds one conversation of about
+  4,000 tokens on Claude Sonnet 5.5:
+</p>
+<ul>
+  <li>four weather tools, about 1,500 tokens,</li>
+  <li>a system prompt, about 2,000 tokens,</li>
+  <li>four turns of history, about 450 tokens.</li>
+</ul>
+<p>
+  It puts a cache breakpoint at the end of each part. Then it sends that conversation eight more times, each with
+  one routing move applied, and prints the cache numbers from every response.
+</p>
+
+<div class="prefix">
+  <div class="tools">tools ≈1,500</div>
+  <div class="system">system ≈2,000</div>
+  <div class="messages">history ≈450</div>
+  <div class="new">new turn</div>
+</div>
+<p class="figcaption">Three breakpoints, one at the end of each segment. Each one can hold its own cache entry.</p>
+
+<p>Three details keep the lab cheap and honest:</p>
+<ul>
+  <li><strong><code>max_tokens: 0</code>.</strong> The API reads the prompt, writes the cache, and returns a full
+    <code>usage</code> block. No output tokens are billed.<span class="cite"><a href="#src-1">1</a></span></li>
+  <li><strong>Sonnet, not Haiku, for the main conversation.</strong> Haiku 4.5 caches nothing under 4,096 tokens.
+    Sonnet 5.5 caches from 512, so each segment here is big enough to get its own cache entry.<span class="cite"><a href="#src-1">1</a></span></li>
+  <li><strong>A random run id at the front of the tools.</strong> Each run starts cold instead of reading what the
+    last run cached. That's the timestamp mistake from lesson 2's warm-up, used on purpose.</li>
+</ul>
+
+<h2>Step 1: predict, before you run anything</h2>
+<p>
+  Answer all eight. The quiz tells you what the rule predicts, and the script will tell you whether the API
+  agrees. Every step starts from the warm conversation, not from the step before it.
+</p>
+
+<div class="quiz" data-score-target="#score">
+
+  <div class="quiz-item" data-correct="hit">
+    <p class="prompt"><strong>1.</strong> Same conversation, a different new user turn appended.</p>
+    <div class="choices">
+      <button data-choice="hit">Full hit</button>
+      <button data-choice="messages">From messages</button>
+      <button data-choice="system">From system</button>
+      <button data-choice="miss">Full miss</button>
+    </div>
+    <div class="explain">The last breakpoint sits on the last history block, before the new turn, so the whole prefix is read.
+      This step's read count becomes the 100% that every later step is compared with.</div>
+  </div>
+
+  <div class="quiz-item" data-correct="messages">
+    <p class="prompt"><strong>2.</strong> Set <code>tool_choice</code> to <code>none</code>.</p>
+    <div class="choices">
+      <button data-choice="hit">Full hit</button>
+      <button data-choice="messages">From messages</button>
+      <button data-choice="system">From system</button>
+      <button data-choice="miss">Full miss</button>
+    </div>
+    <div class="explain">A <code>tool_choice</code> change only invalidates messages.<span class="cite"><a href="#src-1">1</a></span>
+      Expect a read of tools plus system, around 85–90% of step 1, and a small write for the history.</div>
+  </div>
+
+  <div class="quiz-item" data-correct="system">
+    <p class="prompt"><strong>3.</strong> Add one sentence to the end of the top-level <code>system</code> prompt.</p>
+    <div class="choices">
+      <button data-choice="hit">Full hit</button>
+      <button data-choice="messages">From messages</button>
+      <button data-choice="system">From system</button>
+      <button data-choice="miss">Full miss</button>
+    </div>
+    <div class="explain">Only the tools entry survives. Expect a read of about 35–40% of step 1, and a write of the system
+      prompt plus the history.</div>
+  </div>
+
+  <div class="quiz-item" data-correct="hit">
+    <p class="prompt"><strong>4.</strong> Leave <code>system</code> alone, and append the same sentence as a
+      <code>{"role": "system"}</code> message after the history.</p>
+    <div class="choices">
+      <button data-choice="hit">Full hit</button>
+      <button data-choice="messages">From messages</button>
+      <button data-choice="system">From system</button>
+      <button data-choice="miss">Full miss</button>
+    </div>
+    <div class="explain">Same instruction as step 3, but appended after the cached prefix instead of edited into it. Sonnet 5.5
+      supports this.<span class="cite"><a href="#src-1">1</a></span> Expect about 100%. Compare steps 3 and 4 side by side
+      when the numbers come back: this pair is lesson 1 in miniature.</div>
+  </div>
+
+  <div class="quiz-item" data-correct="miss">
+    <p class="prompt"><strong>5.</strong> Add one sentence to the last tool's description.</p>
+    <div class="choices">
+      <button data-choice="hit">Full hit</button>
+      <button data-choice="messages">From messages</button>
+      <button data-choice="system">From system</button>
+      <button data-choice="miss">Full miss</button>
+    </div>
+    <div class="explain">Tools are the leftmost segment. Expect a read of 0, and the whole prompt written again.</div>
+  </div>
+
+  <div class="quiz-item" data-correct="miss">
+    <p class="prompt"><strong>6a.</strong> A separate Haiku classifier request with a one-line prompt. What does
+      <em>its own</em> cache do?</p>
+    <div class="choices">
+      <button data-choice="hit">Full hit</button>
+      <button data-choice="messages">From messages</button>
+      <button data-choice="system">From system</button>
+      <button data-choice="miss">Full miss</button>
+    </div>
+    <div class="explain">There is nothing to hit. The prompt is far below any minimum cacheable length, so expect write 0 and
+      read 0. The docs say exactly this: when both are 0, nothing was cached.<span class="cite"><a href="#src-1">1</a></span>
+      A real classifier prompt with categories and examples would need to clear the minimum to cache.</div>
+  </div>
+
+  <div class="quiz-item" data-correct="hit">
+    <p class="prompt"><strong>6b.</strong> Right after that classifier call, the main conversation gets its next turn.</p>
+    <div class="choices">
+      <button data-choice="hit">Full hit</button>
+      <button data-choice="messages">From messages</button>
+      <button data-choice="system">From system</button>
+      <button data-choice="miss">Full miss</button>
+    </div>
+    <div class="explain">The classifier ran on another model with another prompt. It never touched this conversation's prefix.
+      Expect about 100%.</div>
+  </div>
+
+  <div class="quiz-item" data-correct="miss">
+    <p class="prompt"><strong>7.</strong> The same request, byte for byte, sent to Opus 5.5.</p>
+    <div class="choices">
+      <button data-choice="hit">Full hit</button>
+      <button data-choice="messages">From messages</button>
+      <button data-choice="system">From system</button>
+      <button data-choice="miss">Full miss</button>
+    </div>
+    <div class="explain">The cache belongs to Sonnet. Expect read 0, and the whole prompt written on Opus at Opus's write price.<span class="cite"><a href="#src-1">1</a></span></div>
+  </div>
+
+</div>
+<p class="quiz-score" id="score"></p>
+
+<h2>Step 2: run it</h2>
+<p>From the repo root, with your API key in the environment:</p>
+<pre>ANTHROPIC_API_KEY=sk-ant-... uv run --no-project study/llm-routing/assets/cache_lab.py</pre>
+<p>
+  <code>uv</code> fetches the <code>anthropic</code> SDK for this one run, so nothing gets installed in the workspace.
+  The script makes nine requests and prints one row per request.
+</p>
+
+<h2>Step 3: read the table</h2>
+<table>
+  <tr><th>Column</th><th>Meaning</th></tr>
+  <tr><td><code>write</code></td><td><code>cache_creation_input_tokens</code>: tokens written to cache on this request, billed at 1.25x base input.</td></tr>
+  <tr><td><code>read</code></td><td><code>cache_read_input_tokens</code>: tokens served from cache, billed at a small fraction of base input.</td></tr>
+  <tr><td><code>fresh</code></td><td><code>input_tokens</code>: tokens after the last breakpoint, processed and billed normally. Mostly the new turn.</td></tr>
+  <tr><td><code>read %</code></td><td>This step's read compared with step 1's. It shows how much of the prefix survived the move.</td></tr>
+</table>
+<p>
+  A row matches its prediction when <code>read %</code> lands near the number in that quiz explanation. If one
+  doesn't match, that's the interesting part. Don't explain it away. Bring it to me.
+</p>
+
+<div class="callout">
+  <strong>Send me the output.</strong> Paste the whole table in chat, together with your quiz and warm-up scores.
+  It's the first real evidence of what has stuck across the four lessons, and it decides whether lesson 5 is a
+  review or something new.
+</div>
+
+<h2>Primary source</h2>
+<p>
+  Re-read <a href="https://docs.claude.com/en/docs/build-with-claude/prompt-caching">"What invalidates the cache"</a>
+  with your table open next to it. Then read the section on pre-warming the cache, which is where
+  <code>max_tokens: 0</code> comes from. It's also a real technique for removing the first-turn cache miss in
+  production.
+</p>
+
+<div class="ask">
+  The script errors, a number looks wrong, or you want to try a move that isn't in the list? Ask me in chat.
+  Adding a step to the lab takes a few lines.
+</div>
+
+<footer>
+  <h3>Sources</h3>
+  <ol>
+    <li id="src-1"><a href="https://docs.claude.com/en/docs/build-with-claude/prompt-caching">Claude API docs, "Prompt caching"</a>: invalidation table, minimum lengths, pricing, mid-conversation system messages, pre-warming with <code>max_tokens: 0</code>.</li>
+    <li id="src-2"><a href="https://docs.claude.com/en/docs/about-claude/models/overview">Claude API docs, "Models overview"</a>: model IDs.</li>
+    <li id="src-3"><a href="https://arxiv.org/abs/2305.05176">Chen, Zaharia, Zou, "FrugalGPT" (2023)</a>: LLM cascades.</li>
+    <li id="src-4"><a href="https://arxiv.org/abs/2406.18665">Ong et al., "RouteLLM" (2024)</a>: random-router baseline.</li>
+  </ol>
+</footer>
+
+</main>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

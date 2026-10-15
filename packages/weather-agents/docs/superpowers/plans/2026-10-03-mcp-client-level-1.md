@@ -123,7 +123,9 @@ def test_type_defaults_to_stdio_and_may_be_given(tmp_path):
 
 def test_an_unsupported_type_names_the_server_and_the_supported_types(tmp_path):
     payload = {"mcpServers": {"web": {"type": "http", "url": "http://127.0.0.1:8000/mcp"}}}
-    with pytest.raises(ConfigError, match="server 'web': type 'http' is not supported, supported: stdio"):
+    with pytest.raises(
+        ConfigError, match="server 'web': type 'http' is not supported, supported: stdio"
+    ):
         load_config(write(tmp_path, payload))
 
 
@@ -280,7 +282,9 @@ def _parse_entry(name: str, entry: object) -> StdioServerConfig:
     # The isinstance check also keeps an unhashable JSON value from raising TypeError below.
     if not isinstance(kind, str) or kind not in SUPPORTED_TYPES:
         supported = ", ".join(sorted(SUPPORTED_TYPES))
-        raise ConfigError(f"server '{name}': type {kind!r} is not supported, supported: {supported}")
+        raise ConfigError(
+            f"server '{name}': type {kind!r} is not supported, supported: {supported}"
+        )
     try:
         return StdioServerConfig.model_validate(entry)
     except ValidationError as error:
@@ -600,7 +604,9 @@ async def test_a_protocol_error_names_the_server_and_the_operation():
         with pytest.raises(McpClientError) as caught:
             await session.call_tool("forecast", {})
     assert caught.value.server == "weather"
-    assert str(caught.value) == "MCP server 'weather': call_tool 'forecast' failed: Connection closed"
+    assert (
+        str(caught.value) == "MCP server 'weather': call_tool 'forecast' failed: Connection closed"
+    )
     assert isinstance(caught.value.__cause__, MCPError)
 
 
@@ -617,7 +623,11 @@ async def test_a_spawn_failure_names_the_server_and_the_command():
 async def test_an_exception_group_from_the_sdk_is_unwrapped_to_its_cause():
     nested = ExceptionGroup(
         "unhandled errors in a TaskGroup",
-        [ExceptionGroup("unhandled errors in a TaskGroup", [MCPError(-32000, "Connection closed")])],
+        [
+            ExceptionGroup(
+                "unhandled errors in a TaskGroup", [MCPError(-32000, "Connection closed")]
+            )
+        ],
     )
     session, _ = session_for(FakeClient(open_error=nested))
     with pytest.raises(McpClientError) as caught:
@@ -1231,7 +1241,9 @@ async def test_the_pool_lists_and_uses_everything_the_real_server_offers(tmp_pat
 async def test_a_tool_error_comes_back_as_a_result_not_an_exception(tmp_path):
     with anyio.fail_after(TIME_LIMIT_SECONDS):
         async with McpClientPool.from_file(write_config(tmp_path)) as pool:
-            result = await pool.call_tool("open-meteo", "forecast", {"latitude": 95, "longitude": 0})
+            result = await pool.call_tool(
+                "open-meteo", "forecast", {"latitude": 95, "longitude": 0}
+            )
     content = result.content[0]
     assert result.is_error
     assert isinstance(content, TextContent)

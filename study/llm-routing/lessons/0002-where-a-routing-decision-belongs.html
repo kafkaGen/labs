@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 2: Where a routing decision belongs</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+
+<nav class="crumbs">
+  Routing in LLM applications · Lesson 2 ·
+  <a href="0001-every-routing-decision-is-a-cache-decision.html">Lesson 1</a> ·
+  <a href="../reference/routing-layers.html">Reference: routing layers</a> ·
+  <a href="../reference/prompt-cache-and-routing.html">Reference: prompt cache and routing</a>
+</nav>
+
+<h1>Where a routing decision belongs</h1>
+<p class="subtitle">Three layers can route a request. Each one sees different information, and each one can break your cache.</p>
+
+<div class="win">
+  <strong>Your win:</strong> given a routing decision, you can name the layer that should own it, and say
+  what that layer has to keep sticky so the prompt cache survives. Takes about 15 minutes.
+</div>
+
+<h2>Warm-up: from memory, no peeking</h2>
+<div class="warmup">
+<p>A week has passed since lesson 1. Recalling it now, without looking, is what makes it last. Same setup as
+  before: a long Sonnet conversation with a warm cache.</p>
+
+<div class="quiz" data-score-target="#warmup-score">
+
+  <div class="quiz-item" data-correct="system">
+    <p class="prompt"><strong>W1.</strong> The app writes the current time, to the second, into the top-level
+      <code>system</code> prompt on every request.</p>
+    <div class="choices">
+      <button data-choice="hit">Full hit</button>
+      <button data-choice="messages">From messages</button>
+      <button data-choice="system">From system</button>
+      <button data-choice="miss">Full miss</button>
+    </div>
+    <div class="explain">The system segment changes on every request, so it and everything to its right are reprocessed every
+      time. Manus calls this the classic cache-killing mistake.<span class="cite"><a href="#src-4">4</a></span></div>
+  </div>
+
+  <div class="quiz-item" data-correct="miss">
+    <p class="prompt"><strong>W2.</strong> The router rewrites one tool's description to fit the current route.</p>
+    <div class="choices">
+      <button data-choice="hit">Full hit</button>
+      <button data-choice="messages">From messages</button>
+      <button data-choice="system">From system</button>
+      <button data-choice="miss">Full miss</button>
+    </div>
+    <div class="explain"><code>tools</code> is the leftmost segment. Any edit there, even to a description, invalidates
+      everything.<span class="cite"><a href="#src-5">5</a></span></div>
+  </div>
+
+  <div class="quiz-item" data-correct="messages">
+    <p class="prompt"><strong>W3.</strong> The user pastes a screenshot into the conversation for the first time.</p>
+    <div class="choices">
+      <button data-choice="hit">Full hit</button>
+      <button data-choice="messages">From messages</button>
+      <button data-choice="system">From system</button>
+      <button data-choice="miss">Full miss</button>
+    </div>
+    <div class="explain">Adding or removing images anywhere in the prompt invalidates the messages segment. Tools and system
+      survive. Lesson 1 didn't cover this one, but the rule plus the
+      <a href="../reference/prompt-cache-and-routing.html">reference table</a> did.<span class="cite"><a href="#src-5">5</a></span></div>
+  </div>
+
+</div>
+<p class="quiz-score" id="warmup-score"></p>
+</div>
+
+<h2>Three layers, three questions</h2>
+
+<p>
+  A request passes through up to three places that can route it. They answer different questions, because
+  each one sees different information.
+</p>
+
+<div class="layers">
+  <div class="app"><span class="name">Application</span><span><strong>What kind of task is this, and who handles it?</strong> Your code or your orchestrator agent. It is the only layer that sees what the user means, the conversation, and the task state.</span></div>
+  <div class="gateway"><span class="name">Gateway</span><span><strong>Which deployment serves this model name right now?</strong> A proxy such as LiteLLM or OpenRouter. It sees model names, provider health, rate limits, and prices. It doesn't know what the task is.</span></div>
+  <div class="server"><span class="name">Server</span><span><strong>Which machine already holds this prefix?</strong> The inference server and the load balancer in front of its replicas. It sees KV cache state and GPU load.</span></div>
+</div>
+<p class="figcaption">Top to bottom: from closest to the user to closest to the GPU.</p>
+
+<p>
+  Here is the placement rule: <strong>give each decision to the layer that has the information it needs.</strong>
+  Intent needs meaning, so it belongs in the application. Failover needs provider health, so it belongs in the
+  gateway. Machine choice needs cache state, so it belongs in the server layer. A decision made in the wrong
+  layer is made blind.
+</p>
+
+<h3>Application: intent, and model choice at a boundary</h3>
+<p>
+  Lesson 1 ended on a question: if a hard subtask needs a stronger model, where does that call go? Anthropic's
+  Research system answers it. A lead agent on Claude Opus hands subtasks to subagents on Claude Sonnet, and
+  each subagent runs "with their own context windows".<span class="cite"><a href="#src-1">1</a></span>
+  The model is chosen when the subtask is delegated, so the lead conversation never changes model and keeps its
+  cache. The cost: multi-agent runs used about 15 times the tokens of a chat.<span class="cite"><a href="#src-1">1</a></span>
+</p>
+
+<h3>Gateway: deployments, fallbacks, and the shuffle trap</h3>
+<p>
+  LiteLLM's default strategy, <code>simple-shuffle</code>, spreads requests for one model name across all its
+  deployments.<span class="cite"><a href="#src-2">2</a></span> For a conversation, that is a cache problem.
+  LiteLLM's own docs say to pin a session "when the deployments behind a model group do not share state, for
+  example provider-side prompt caching", and they provide a <code>session_affinity</code> check for it.<span class="cite"><a href="#src-2">2</a></span>
+  OpenRouter does the same thing by default. It keeps a conversation on the same provider for as long as caching
+  pays, until 10 minutes of inactivity, keyed on an optional <code>session_id</code>.<span class="cite"><a href="#src-3">3</a></span>
+</p>
+
+<h3>Server: send the request to the cache</h3>
+<p>
+  A KV cache lives in one server's memory. vLLM's automatic prefix caching reuses it across turns of a
+  conversation on that instance.<span class="cite"><a href="#src-6">6</a></span> With several replicas, a plain
+  load balancer scatters turns across them. The Kubernetes Gateway API Inference Extension adds an
+  endpoint picker that routes on metrics such as "Prefix Cache status".<span class="cite"><a href="#src-7">7</a></span>
+  On the Claude API, Anthropic runs this layer, not you. Your only lever there is the stable prefix from lesson 1.
+</p>
+
+<div class="callout">
+  <strong>The cache rule across layers:</strong> every layer has to keep a conversation on whatever holds its
+  cache. The application keeps the same model. The gateway keeps the same deployment. The server layer keeps
+  the same machine. Each one fails the same way: it routes for spread or for cost on each turn, and forgets the
+  conversation.
+</div>
+
+<hr>
+
+<h2>Practice: name the layer</h2>
+<p>
+  For each case, pick the layer that should own the decision, or the layer that is causing the problem.
+</p>
+
+<div class="quiz" data-score-target="#score">
+
+  <div class="quiz-item" data-correct="app">
+    <p class="prompt"><strong>1.</strong> Midway through a Sonnet conversation, the lead agent judges one subtask hard enough
+      to need Opus.</p>
+    <div class="choices">
+      <button data-choice="app">Application layer</button>
+      <button data-choice="gateway">Gateway layer</button>
+      <button data-choice="server">Server layer</button>
+    </div>
+    <div class="explain">Only the application knows the subtask is hard. The cache-safe way is the Research system's: delegate
+      to a subagent with its own context on Opus, and keep the lead conversation on Sonnet.<span class="cite"><a href="#src-1">1</a></span></div>
+  </div>
+
+  <div class="quiz-item" data-correct="gateway">
+    <p class="prompt"><strong>2.</strong> A team routes through LiteLLM with <code>simple-shuffle</code> across two Azure regions.
+      Each conversation's cache hit rate hovers around half. Which layer is losing it?</p>
+    <div class="choices">
+      <button data-choice="app">Application layer</button>
+      <button data-choice="gateway">Gateway layer</button>
+      <button data-choice="server">Server layer</button>
+    </div>
+    <div class="explain">The shuffle sends turns of one conversation to two deployments that don't share a cache. The fix lives
+      in the same layer: turn on <code>session_affinity</code> and send a session id on every turn.<span class="cite"><a href="#src-2">2</a></span></div>
+  </div>
+
+  <div class="quiz-item" data-correct="server">
+    <p class="prompt"><strong>3.</strong> You self-host a model on four vLLM replicas. You want each turn to land on the replica
+      that already holds that conversation's prefix.</p>
+    <div class="choices">
+      <button data-choice="app">Application layer</button>
+      <button data-choice="gateway">Gateway layer</button>
+      <button data-choice="server">Server layer</button>
+    </div>
+    <div class="explain">Only the serving side knows which replica holds which prefix. That is what the Inference Extension's
+      endpoint picker reads.<span class="cite"><a href="#src-7">7</a></span> The application could pin turns by session id
+      as a crude version, but it can't see cache eviction or GPU load.</div>
+  </div>
+
+  <div class="quiz-item" data-correct="app">
+    <p class="prompt"><strong>4.</strong> Refund questions should go to a refund agent with its own prompt and tools. Shipping
+      questions should go to a shipping agent.</p>
+    <div class="choices">
+      <button data-choice="app">Application layer</button>
+      <button data-choice="gateway">Gateway layer</button>
+      <button data-choice="server">Server layer</button>
+    </div>
+    <div class="explain">This is Anthropic's textbook routing example, and it needs to know what the user means.<span class="cite"><a href="#src-8">8</a></span>
+      A gateway sees a model name, not a refund.</div>
+  </div>
+
+  <div class="quiz-item" data-correct="server">
+    <p class="prompt"><strong>5.</strong> vLLM replicas sit behind a round-robin load balancer. Prefix caching is on, yet
+      multi-turn hit rates are poor.</p>
+    <div class="choices">
+      <button data-choice="app">Application layer</button>
+      <button data-choice="gateway">Gateway layer</button>
+      <button data-choice="server">Server layer</button>
+    </div>
+    <div class="explain">Each replica caches only what it has seen.<span class="cite"><a href="#src-6">6</a></span> Round robin
+      sends turn 2 to a replica that never saw turn 1. Manus gives the same advice for self-hosted vLLM: route
+      requests consistently across workers, using session ids.<span class="cite"><a href="#src-4">4</a></span></div>
+  </div>
+
+  <div class="quiz-item" data-correct="gateway">
+    <p class="prompt"><strong>6.</strong> The Anthropic API is overloaded. You want the same model served from another platform
+      until it recovers.</p>
+    <div class="choices">
+      <button data-choice="app">Application layer</button>
+      <button data-choice="gateway">Gateway layer</button>
+      <button data-choice="server">Server layer</button>
+    </div>
+    <div class="explain">Failover needs provider health, which is what gateways track: fallbacks, cooldowns, and retries are
+      LiteLLM's core features.<span class="cite"><a href="#src-2">2</a></span> Expect the first request on the new platform
+      to start cold, since caches don't move between providers.</div>
+  </div>
+
+</div>
+<p class="quiz-score" id="score"></p>
+
+<h2>What to take away</h2>
+<ul>
+  <li><strong>Meaning-based routing stays in your code.</strong> Intent, task difficulty, and which agent handles what.</li>
+  <li><strong>Infrastructure routing stays below it.</strong> Providers, regions, and replicas.</li>
+  <li><strong>Every layer needs stickiness.</strong> Same model, same deployment, same machine, for the life of a conversation.</li>
+</ul>
+<p>
+  Next, <a href="0003-a-router-is-a-classifier-you-have-to-test.html">lesson 3</a> asks what makes a good router in the application layer: how to classify cheaply, what to do
+  when the classifier isn't sure, and how to tell whether the router is helping at all.
+</p>
+
+<div class="callout">
+  <strong>Retrieval check, from memory.</strong> Close this tab. Draw the three layers and write next to each
+  the question it answers and the thing it must keep sticky. Then take your own agent design and place each
+  routing decision in it on one of the three layers.
+</div>
+
+<h2>Primary source</h2>
+<p>
+  Read Anthropic's <a href="https://www.anthropic.com/engineering/multi-agent-research-system">"How we built our multi-agent research system"</a>.
+  It is the clearest real example of application-layer routing: delegation, a model chosen per role, and
+  what it costs in tokens. For the gateway layer, skim the
+  <a href="https://openrouter.ai/docs/features/prompt-caching">OpenRouter sticky routing section</a>. It's short.
+</p>
+
+<div class="ask">
+  Not sure where one of your own routing decisions belongs? Describe it to me in chat and we'll place it together.
+  Mixed cases, where two layers both want to decide, are the most useful to talk through.
+</div>
+
+<footer>
+  <h3>Sources</h3>
+  <ol>
+    <li id="src-1"><a href="https://www.anthropic.com/engineering/multi-agent-research-system">Anthropic, "How we built our multi-agent research system"</a>: Opus lead with Sonnet subagents, separate context windows, about 15x tokens.</li>
+    <li id="src-2"><a href="https://docs.litellm.ai/docs/routing">LiteLLM docs, "Router: load balancing"</a>: routing strategies, fallbacks, session affinity.</li>
+    <li id="src-3"><a href="https://openrouter.ai/docs/features/prompt-caching">OpenRouter docs, "Prompt caching"</a>: provider sticky routing, <code>session_id</code>.</li>
+    <li id="src-4"><a href="https://manus.im/blog/Context-Engineering-for-AI-Agents-Lessons-from-Building-Manus">Yichao Ji, "Context Engineering for AI Agents"</a>: timestamps in the prefix, consistent routing for self-hosted vLLM.</li>
+    <li id="src-5"><a href="https://docs.claude.com/en/docs/build-with-claude/prompt-caching">Claude API docs, "Prompt caching"</a>: invalidation table.</li>
+    <li id="src-6"><a href="https://docs.vllm.ai/en/latest/features/automatic_prefix_caching.html">vLLM docs, "Automatic Prefix Caching"</a>: KV cache reuse within an instance.</li>
+    <li id="src-7"><a href="https://gateway-api-inference-extension.sigs.k8s.io/">Kubernetes Gateway API Inference Extension</a>: endpoint picker routing on prefix cache status.</li>
+    <li id="src-8"><a href="https://www.anthropic.com/engineering/building-effective-agents">Anthropic, "Building effective agents"</a>: the routing workflow.</li>
+  </ol>
+</footer>
+
+</main>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

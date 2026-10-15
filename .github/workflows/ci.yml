@@ -137,13 +137,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - env:
-          RESULTS: ${{ join(needs.*.result, ' ') }}
+      - name: Summarize results
+        env:
+          NEEDS: ${{ toJSON(needs) }}
         run: |
-          echo "Results: $RESULTS"
-          for r in $RESULTS; do
-            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
-              echo "::error::A required job ended with '$r'."
-              exit 1
-            fi
-          done
+          {
+            echo "### CI results"
+            echo
+            echo "| Job | Result |"
+            echo "|---|---|"
+            jq -r 'to_entries[] | "| \(.key) | \(.value.result) |"' <<<"$NEEDS"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          failed="$(jq -r 'to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | "\(.key) (\(.value.result))"' <<<"$NEEDS")"
+          if [ -n "$failed" ]; then
+            while IFS= read -r job; do
+              echo "::error::Required job did not pass: $job"
+            done <<<"$failed"
+            exit 1
+          fi

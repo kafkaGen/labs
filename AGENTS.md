@@ -8,12 +8,6 @@ Each project lives in its own directory under `packages/` and owns its code, its
 
 `study/` holds learning workspaces, not code. Each topic gets its own directory, `study/<topic>/`, with the layout the `teach` skill defines: `MISSION.md`, `RESOURCES.md`, `NOTES.md`, `lessons/`, `reference/`, `learning-records/`, and `assets/`. When the `teach` skill says "the current directory", read it as that topic directory. A study workspace is not a package: it has no `docs/`, no ADRs, and nothing in `packages/` imports from it.
 
-## Every home lands on the default branch through its own pull request
-
-One working session can touch several homes at once: a package, a library package another package imports, a skill or rule in `.cursor/`, root config, a study. Each home reaches the default branch through its own branch and its own pull request. Nothing is committed straight to the default branch. Read its name from `origin/HEAD`.
-
-When the user asks to commit or open a PR for one home, stage only that home's files. Leave every other change in the working tree, uncommitted, until the user names it. "Create a PR for the weather-agents docs" means a branch with `packages/weather-agents/` changes and nothing else. "Create a PR for the skills" or "for the study" means a separate branch for those files, cut from the default branch. A change in another home that this PR cannot work without is the one exception: name it and ask before staging it.
-
 ## Docs paths are relative to a package
 
 When a skill or an instruction names a docs path, read it as relative to the project you are working in, never to the repo root. `docs/vision.md` means `packages/<project>/docs/vision.md`. `docs/adr/` means `packages/<project>/docs/adr/`, and its numbering starts at `0001` independently of every other package. The same goes for `docs/architecture.md` and `docs/prd/`.

@@ -2,7 +2,7 @@
 
 from anthropic.types import MessageParam
 
-from weather_agents.agent_loop.models import TokenUsage
+from weather_agents.agent_loop.result import TokenUsage
 
 __all__ = ["ApiCallError", "InvalidAnswerError", "RunError", "StopReasonError"]
 

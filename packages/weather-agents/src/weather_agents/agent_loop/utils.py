@@ -1,4 +1,4 @@
-"""Cuts logged values to a fixed length so debug logs stay readable."""
+"""Small helpers the agent loop shares."""
 
 import json
 

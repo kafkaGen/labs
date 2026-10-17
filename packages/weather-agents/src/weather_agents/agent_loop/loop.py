@@ -15,6 +15,7 @@ from anthropic.types import (
 from labs_logging import get_logger
 from pydantic import ValidationError
 
+from weather_agents.agent_loop.answer import Answer, Resource, ToolCallResource
 from weather_agents.agent_loop.errors import InvalidAnswerError, RunError, StopReasonError
 from weather_agents.agent_loop.interfaces import (
     ModelCaller,
@@ -24,14 +25,8 @@ from weather_agents.agent_loop.interfaces import (
     ToolSpec,
 )
 from weather_agents.agent_loop.ledger import SourceLedger
-from weather_agents.agent_loop.models import (
-    Answer,
-    Resource,
-    RunResult,
-    TokenUsage,
-    ToolCallResource,
-)
-from weather_agents.agent_loop.truncate import truncate
+from weather_agents.agent_loop.result import RunResult, TokenUsage
+from weather_agents.agent_loop.utils import truncate
 from weather_agents.agents import AgentDefinition
 from weather_agents.settings import Settings
 

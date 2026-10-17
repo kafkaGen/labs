@@ -1,4 +1,4 @@
-from weather_agents.agent_loop.truncate import truncate
+from weather_agents.agent_loop.utils import truncate
 
 
 def test_a_short_value_is_unchanged():

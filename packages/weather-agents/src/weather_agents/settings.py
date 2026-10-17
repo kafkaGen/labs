@@ -1,4 +1,4 @@
-"""Agent runtime settings: defaults here, then `packages/weather-agents/.env`, then the environment."""
+"""Agent runtime settings: defaults, then the package `.env`, then the environment."""
 
 from pathlib import Path
 from typing import Annotated, Literal
@@ -37,7 +37,10 @@ class Settings(BaseSettings):
     mcp_config: Path = PACKAGE_ROOT / "mcp.stdio.json"
     log_level: LogLevel = "INFO"
     log_truncate: Annotated[int, Field(gt=0)] = 200
-    anthropic_api_key: Annotated[SecretStr, Field(validation_alias=AliasChoices("ANTHROPIC_API_KEY", "anthropic_api_key"))]
+    anthropic_api_key: Annotated[
+        SecretStr,
+        Field(validation_alias=AliasChoices("ANTHROPIC_API_KEY", "anthropic_api_key")),
+    ]
 
     @field_validator("mcp_config")
     @classmethod

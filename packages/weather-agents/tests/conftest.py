@@ -1,3 +1,4 @@
+import os
 from collections.abc import AsyncIterator
 from datetime import date
 
@@ -26,3 +27,10 @@ async def client(fake: FakeOpenMeteo) -> AsyncIterator[Client]:
     server = create_server(transport=httpx.MockTransport(fake), today=lambda: TODAY)
     async with Client(server) as connected:
         yield connected
+
+
+@pytest.fixture(autouse=True)
+def _no_agent_settings_from_the_shell(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in list(os.environ):
+        if name.startswith("WEATHER_AGENTS_"):
+            monkeypatch.delenv(name)

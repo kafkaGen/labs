@@ -57,7 +57,7 @@ New dependencies: `anthropic>=1.15,<2`, `pydantic-settings>=2`, and `labs-loggin
 | Field | Type | Default |
 |---|---|---|
 | `model` | `str` | `"claude-haiku-5-5"` |
-| `effort` | `Effort` enum: `low`, `medium`, `high`, `xhigh`, `max` | `low` |
+| `effort` | `Effort`, a `Literal` of `low`, `medium`, `high`, `xhigh`, `max`. A `Literal` rather than an `Enum`, so the value passes to the SDK's typed parameter unchanged | `low` |
 | `thinking` | `bool`, adaptive when true, disabled when false | `True` |
 | `max_tokens` | `int`, greater than 0 | `32_000` |
 | `fast_mode` | `bool` | `False` |
@@ -79,12 +79,12 @@ New dependencies: `anthropic>=1.15,<2`, `pydantic-settings>=2`, and `labs-loggin
 
 `interfaces.py` holds the two seams the loop depends on. Both are `Protocol`s.
 
-- `ModelCaller.call(request: ModelRequest) -> anthropic.types.ParsedMessage[Answer]`. `ModelRequest` is a frozen pydantic model holding `system`, `messages` (a list of SDK `MessageParam`), `tools` (a list of `ToolSpec`), and the settings the call needs.
+- `ModelCaller.call(request: ModelRequest) -> anthropic.types.Message`. `ModelRequest` is a frozen dataclass holding `system`, `messages` (a list of SDK `MessageParam`), and `tools` (a list of `ToolSpec`). It is a dataclass rather than pydantic so the SDK's TypedDicts pass through unvalidated. The settings a call needs live in the caller, which gets them when it is built.
 - `ToolProvider.list_tools() -> list[ToolSpec]` and `ToolProvider.call(name: str, arguments: dict[str, object]) -> ToolOutcome`. `ToolSpec` has `name`, `description`, and `input_schema`, the strict one. `ToolOutcome` has `content: str` and `is_error: bool`.
 
 The SDK's message types cross the seam unchanged. The project uses one provider ([vision](../../vision.md) non-goals), so wrapping them would only hide the API being learned.
 
-`AnthropicModelCaller(client: AsyncAnthropic, settings: Settings)` sends each request with `client.messages.stream(...)`, passing `output_format=Answer` and every tool with `strict: True`, and returns `await stream.get_final_message()`. Assumed: with `output_format` set, that message carries `parsed_output`. The plan's first `AnthropicModelCaller` task checks this against the SDK source, and if it is false, the caller validates the final text with `Answer.model_validate_json` instead. It always streams, so a long request never trips the SDK's limit on non-streamed calls, and slice 3 only has to pass the events on. It wraps `anthropic.APIError` in `ApiCallError`, keeping the original as `__cause__`. In this slice the SDK keeps its default retries. Slice 2 sets them.
+`AnthropicModelCaller(client: AsyncAnthropic, settings: Settings)` sends each request with `client.messages.stream(...)`, passing `output_config={"effort": ..., "format": {"type": "json_schema", "schema": transform_schema(Answer)}}` and every tool with `strict: True`, and returns `await stream.get_final_message()`. It does not pass `output_format=Answer`. With that set, the SDK parses every text block as the stream ends (checked in `anthropic` 1.15's `lib/streaming/_messages.py`), so a non-JSON preamble in a `tool_use` turn, or a reply cut off at `max_tokens`, would raise a pydantic error before the loop could see the stop reason. The loop parses the answer itself, on `end_turn` only. It always streams, so a long request never trips the SDK's limit on non-streamed calls, and slice 3 only has to pass the events on. It wraps `anthropic.APIError` in `ApiCallError`, keeping the original as `__cause__`. In this slice the SDK keeps its default retries. Slice 2 sets them.
 
 ## The structured answer
 
@@ -116,7 +116,7 @@ Structured output is sent on every call in a run, because it only constrains the
 3. It acts on `stop_reason`:
    - `tool_use`: it yields `ToolCallStarted(id, name, arguments)` for each `tool_use` block, then runs every call at once in an `asyncio.TaskGroup`. Each call is recorded in the ledger as it starts. When all are done, it yields `ToolCallFinished(id, name, is_error, content)` for each, in the model's order, appends one user message holding every `tool_result` (`is_error` set from the outcome), and goes to the next step.
    - `pause_turn`: it goes to the next step with nothing appended.
-   - `end_turn`: it reads `parsed_output`. If there is none, it raises `InvalidAnswerError`. Otherwise it checks each `ToolCallResource` against the ledger and drops any that fail, with a warning. It yields `RunFinished(result, messages)`, where `messages` is the working list.
+   - `end_turn`: it validates the reply's text with `Answer.model_validate_json`. Text that is empty or does not validate raises `InvalidAnswerError`. Otherwise it checks each resource against the ledger and drops any that fail, with a warning. It yields `RunFinished(result, messages)`, where `messages` is the working list.
    - Anything else (`max_tokens`, `stop_sequence`, `refusal`, `model_context_window_exceeded`, and any value the SDK adds later) raises `StopReasonError(stop_reason)`.
 4. A tool call never raises into the loop. `ToolProvider.call` returns an error outcome for an MCP failure. An unexpected exception inside one call becomes an error outcome naming its type, so one bad call cannot cancel its siblings in the task group.
 
@@ -124,7 +124,7 @@ Structured output is sent on every call in a run, because it only constrains the
 
 ## Resource check
 
-`SourceLedger` belongs to the session and lives as long as it does. `record_tool_call(name, arguments)` stores the prefixed tool name and the arguments dict. `has_tool_call(name, arguments_json)` parses the JSON and compares it to each recorded call with `==`. Invalid JSON counts as not found. Slice 4 adds URLs. Calls from a failed request stay in the ledger, because their data was fetched.
+`SourceLedger` belongs to the session and lives as long as it does. `record_tool_call(name, arguments)` stores the prefixed tool name and the arguments dict. `has_tool_call(name, arguments_json)` parses the JSON and compares it to each recorded call with `==`. Invalid JSON counts as not found. `record_url(url)` and `has_url(url)` hold URLs. Nothing records one in this slice, so every `UrlResource` is dropped until slice 4's web tools record the URLs they touch. Calls from a failed request stay in the ledger, because their data was fetched.
 
 ## Errors
 
@@ -132,7 +132,7 @@ Structured output is sent on every call in a run, because it only constrains the
 |---|---|---|
 | `RunError` | Base class. Never raised itself | `session_id`, `usage`, `partial_text` (the text blocks of the last assistant message, or `""`) |
 | `StopReasonError(RunError)` | A stop reason the loop does not continue on | `stop_reason` |
-| `InvalidAnswerError(RunError)` | `end_turn` with no parsed answer | |
+| `InvalidAnswerError(RunError)` | `end_turn` whose text is not a valid `Answer` | |
 | `ApiCallError(RunError)` | The SDK raised, after its own retries | `status_code` or `None` for a connection error |
 | `SessionNotFoundError` | `send` or `clear` named an id the runtime does not hold. Not a `RunError`: no run started | `session_id` |
 

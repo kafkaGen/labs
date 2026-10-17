@@ -16,10 +16,8 @@ from tests.agent_loop.fakes import (
 from weather_agents.agent_loop import (
     ApiCallError,
     InvalidAnswerError,
-    RunFinished,
     SourceLedger,
     StopReasonError,
-    ToolCallFinished,
     ToolOutcome,
 )
 from weather_agents.agent_loop.loop import run_agent
@@ -32,8 +30,7 @@ QUESTION = "Weather in Berlin?"
 
 async def run(caller, tools=None, *, history=None, ledger=None):
     tools = tools if tools is not None else FakeToolProvider()
-    events = []
-    async for event in run_agent(
+    return await run_agent(
         caller=caller,
         tools=tools,
         tool_specs=await tools.list_tools(),
@@ -42,22 +39,18 @@ async def run(caller, tools=None, *, history=None, ledger=None):
         history=history if history is not None else [],
         question=QUESTION,
         ledger=ledger if ledger is not None else SourceLedger(),
-    ):
-        events.append(event)
-    return events
+    )
 
 
 async def test_an_end_turn_reply_finishes_the_run_with_its_answer():
     caller = FakeModelCaller(answer_reply("Sunny."))
-    events = await run(caller)
-    finished = events[-1]
-    assert isinstance(finished, RunFinished)
-    assert finished.result.answer.answer == "Sunny."
-    assert (finished.result.turns, finished.result.tool_calls) == (1, 0)
-    assert finished.result.usage.input == 10
+    result, messages = await run(caller)
+    assert result.answer.answer == "Sunny."
+    assert (result.turns, result.tool_calls) == (1, 0)
+    assert result.usage.input == 10
     assert caller.requests[0].system == WEATHER_AGENT.system_prompt
     assert caller.requests[0].messages == [{"role": "user", "content": QUESTION}]
-    assert [m["role"] for m in finished.messages] == ["user", "assistant"]
+    assert [m["role"] for m in messages] == ["user", "assistant"]
 
 
 async def test_tool_calls_from_one_turn_run_at_once_and_return_in_one_message():
@@ -79,31 +72,21 @@ async def test_tool_calls_from_one_turn_run_at_once_and_return_in_one_message():
         ),
         answer_reply(),
     )
-    events = await run(caller, tools)
+    result, messages = await run(caller, tools)
     results = content_of(caller.requests[1].messages[-1])
     assert [r["tool_use_id"] for r in results] == ["t1", "t2", "t3"]
     assert [r["content"] for r in results] == ["21 °C", "calm", "low"]
     assert [r["is_error"] for r in results] == [False, False, False]
-    assert [type(e).__name__ for e in events] == [
-        "ModelTurn",
-        "ToolCallStarted",
-        "ToolCallStarted",
-        "ToolCallStarted",
-        "ToolCallFinished",
-        "ToolCallFinished",
-        "ToolCallFinished",
-        "ModelTurn",
-        "RunFinished",
-    ]
-    assert (events[-1].result.turns, events[-1].result.tool_calls) == (2, 3)
+    assert (result.turns, result.tool_calls) == (2, 3)
+    assert [m["role"] for m in messages] == ["user", "assistant", "user", "assistant"]
 
 
 async def test_pause_turn_calls_again_with_nothing_added():
     caller = FakeModelCaller(reply(text("Searching"), stop_reason="pause_turn"), answer_reply())
-    events = await run(caller)
+    result, _ = await run(caller)
     assert len(caller.requests) == 2
     assert caller.requests[1].messages[-1]["role"] == "assistant"
-    assert isinstance(events[-1], RunFinished)
+    assert result.turns == 2
 
 
 @pytest.mark.parametrize(
@@ -117,6 +100,7 @@ async def test_a_stop_reason_the_loop_cannot_continue_on_raises(stop_reason):
     assert caught.value.partial_text == '{"answer": "Sun'
     assert caught.value.usage.input == 10
     assert caught.value.session_id == ""
+    assert [m["role"] for m in caught.value.messages] == ["user", "assistant"]
 
 
 async def test_thinking_and_tool_use_blocks_go_back_unchanged():
@@ -143,6 +127,7 @@ async def test_a_final_reply_that_is_not_an_answer_raises():
     with pytest.raises(InvalidAnswerError) as caught:
         await run(caller)
     assert caught.value.partial_text == "It is sunny."
+    assert [m["role"] for m in caught.value.messages] == ["user", "assistant"]
 
 
 async def test_resources_the_session_never_touched_are_dropped():
@@ -166,8 +151,8 @@ async def test_resources_the_session_never_touched_are_dropped():
             ]
         ),
     )
-    events = await run(caller, FakeToolProvider({FORECAST: ToolOutcome(content="21")}))
-    assert [r.title for r in events[-1].result.answer.resources] == ["Forecast"]
+    result, _ = await run(caller, FakeToolProvider({FORECAST: ToolOutcome(content="21")}))
+    assert [r.title for r in result.answer.resources] == ["Forecast"]
 
 
 async def test_a_resource_from_earlier_in_the_session_is_kept():
@@ -179,19 +164,18 @@ async def test_a_resource_from_earlier_in_the_session_is_kept():
         "arguments": '{"latitude": 52.52, "longitude": 13.41}',
         "title": "Earlier forecast",
     }
-    events = await run(FakeModelCaller(answer_reply(resources=[resource])), ledger=ledger)
-    assert [r.title for r in events[-1].result.answer.resources] == ["Earlier forecast"]
+    result, _ = await run(FakeModelCaller(answer_reply(resources=[resource])), ledger=ledger)
+    assert [r.title for r in result.answer.resources] == ["Earlier forecast"]
 
 
 async def test_a_tool_that_raises_becomes_an_error_result():
     caller = FakeModelCaller(
         reply(tool_use("t1", FORECAST, BERLIN), stop_reason="tool_use"), answer_reply()
     )
-    events = await run(caller, FakeToolProvider({FORECAST: RuntimeError("boom")}))
-    (finished,) = [e for e in events if isinstance(e, ToolCallFinished)]
-    assert finished.is_error
-    assert "RuntimeError: boom" in finished.content
-    assert content_of(caller.requests[1].messages[-1])[0]["is_error"] is True
+    await run(caller, FakeToolProvider({FORECAST: RuntimeError("boom")}))
+    (result,) = content_of(caller.requests[1].messages[-1])
+    assert result["is_error"] is True
+    assert "RuntimeError: boom" in result["content"]
 
 
 async def test_the_history_passed_in_is_not_changed():
@@ -200,12 +184,12 @@ async def test_the_history_passed_in_is_not_changed():
         {"role": "assistant", "content": "Earlier answer"},
     ]
     snapshot = list(history)
-    events = await run(FakeModelCaller(answer_reply()), history=history)
+    _, messages = await run(FakeModelCaller(answer_reply()), history=history)
     assert history == snapshot
-    assert [m["role"] for m in events[-1].messages] == ["user", "assistant", "user", "assistant"]
+    assert [m["role"] for m in messages] == ["user", "assistant", "user", "assistant"]
 
 
-async def test_an_api_error_carries_the_usage_so_far():
+async def test_an_api_error_carries_the_usage_and_every_message_so_far():
     caller = FakeModelCaller(
         reply(tool_use("t1", FORECAST, BERLIN), stop_reason="tool_use"),
         ApiCallError("the API returned 529: overloaded", status_code=529),
@@ -213,3 +197,4 @@ async def test_an_api_error_carries_the_usage_so_far():
     with pytest.raises(ApiCallError) as caught:
         await run(caller, FakeToolProvider({FORECAST: ToolOutcome(content="21")}))
     assert caught.value.usage.input == 10
+    assert [m["role"] for m in caught.value.messages] == ["user", "assistant", "user"]

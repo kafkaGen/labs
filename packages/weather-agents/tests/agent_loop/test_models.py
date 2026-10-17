@@ -3,8 +3,7 @@ import json
 import anthropic
 from anthropic.types import Usage
 
-from weather_agents.agent_loop.answer import Answer, ToolCallResource, UrlResource
-from weather_agents.agent_loop.result import TokenUsage
+from weather_agents.agent_loop.models import Answer, TokenUsage, ToolCallResource, UrlResource
 
 
 def test_an_answer_with_both_kinds_of_resource_parses_from_json():

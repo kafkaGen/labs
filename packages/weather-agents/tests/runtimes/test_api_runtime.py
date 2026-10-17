@@ -6,13 +6,14 @@ from tests.agent_loop.fakes import (
     FORECAST,
     FakeModelCaller,
     answer_reply,
+    content_of,
     make_settings,
     reply,
     text,
     tool_use,
 )
 from tests.runtimes.fakes import FakePool
-from weather_agents.agent_loop import StopReasonError
+from weather_agents.agent_loop import ApiCallError, StopReasonError
 from weather_agents.mcp_client import McpClientError
 from weather_agents.runtimes import ApiRuntime, SessionNotFoundError
 
@@ -67,7 +68,7 @@ async def test_an_unknown_session_id_fails_before_any_model_call():
     assert caller.requests == []
 
 
-async def test_a_failed_request_leaves_the_question_and_the_error_in_the_session():
+async def test_a_failed_request_keeps_what_happened_then_the_error():
     caller = FakeModelCaller(
         reply(tool_use("t1", FORECAST, BERLIN), stop_reason="tool_use"),
         reply(text("I can't"), stop_reason="refusal"),
@@ -78,13 +79,64 @@ async def test_a_failed_request_leaves_the_question_and_the_error_in_the_session
             await rt.send("Weather in Berlin?")
         assert len(caught.value.session_id) == 32
         await rt.send("Try again?", caught.value.session_id)
-    assert caller.requests[2].messages == [
-        {"role": "user", "content": "Weather in Berlin?"},
-        {
-            "role": "assistant",
-            "content": "The previous request failed: the model stopped with 'refusal'",
-        },
-        {"role": "user", "content": "Try again?"},
+    messages = caller.requests[2].messages
+    assert [m["role"] for m in messages] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "assistant",
+        "user",
+    ]
+    assert content_of(messages[1])[0]["type"] == "tool_use"
+    assert content_of(messages[2])[0]["content"] == "ok"
+    assert content_of(messages[3])[0]["text"] == "I can't"
+    assert messages[4]["content"] == "The previous request failed: the model stopped with 'refusal'"
+    assert messages[5]["content"] == "Try again?"
+
+
+async def test_an_unanswered_tool_call_gets_the_error_as_its_result():
+    caller = FakeModelCaller(
+        reply(tool_use("t1", FORECAST, BERLIN), stop_reason="max_tokens"),
+        answer_reply(),
+    )
+    async with runtime(caller) as rt:
+        with pytest.raises(StopReasonError) as caught:
+            await rt.send("Weather in Berlin?")
+        await rt.send("Try again?", caught.value.session_id)
+    messages = caller.requests[1].messages
+    assert [m["role"] for m in messages] == ["user", "assistant", "user", "user"]
+    (result,) = content_of(messages[2])
+    assert result["tool_use_id"] == "t1"
+    assert result["is_error"] is True
+    assert result["content"] == "The previous request failed: the model stopped with 'max_tokens'"
+
+
+async def test_an_empty_assistant_reply_is_dropped_before_the_error():
+    caller = FakeModelCaller(reply(stop_reason="refusal"), answer_reply())
+    async with runtime(caller) as rt:
+        with pytest.raises(StopReasonError) as caught:
+            await rt.send("Weather in Berlin?")
+        await rt.send("Try again?", caught.value.session_id)
+    assert [m["role"] for m in caller.requests[1].messages] == ["user", "assistant", "user"]
+
+
+async def test_an_api_error_after_a_tool_call_keeps_the_call_and_its_result():
+    caller = FakeModelCaller(
+        reply(tool_use("t1", FORECAST, BERLIN), stop_reason="tool_use"),
+        ApiCallError("the API returned 529: overloaded", status_code=529),
+        answer_reply(),
+    )
+    async with runtime(caller) as rt:
+        with pytest.raises(ApiCallError) as caught:
+            await rt.send("Weather in Berlin?")
+        await rt.send("Try again?", caught.value.session_id)
+    assert [m["role"] for m in caller.requests[2].messages] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "user",
     ]
 
 

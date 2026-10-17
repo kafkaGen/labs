@@ -1,14 +1,6 @@
-"""Agent runtimes behind one interface. The CLI depends on the interface only."""
+"""The API runtime and the MCP tools it gives the agent loop."""
 
-from weather_agents.runtimes.api import ApiRuntime, Session
-from weather_agents.runtimes.base import AgentRuntime, SessionNotFoundError
+from weather_agents.runtimes.api import ApiRuntime, Session, SessionNotFoundError
 from weather_agents.runtimes.mcp_tools import McpToolProvider, ToolPool
 
-__all__ = [
-    "AgentRuntime",
-    "ApiRuntime",
-    "McpToolProvider",
-    "Session",
-    "SessionNotFoundError",
-    "ToolPool",
-]
+__all__ = ["ApiRuntime", "McpToolProvider", "Session", "SessionNotFoundError", "ToolPool"]

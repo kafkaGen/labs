@@ -4,9 +4,9 @@ import anthropic
 from anthropic import AsyncAnthropic, omit
 from anthropic.types import Message, OutputConfigParam, ThinkingConfigParam, ToolParam
 
-from weather_agents.agent_loop.answer import Answer
 from weather_agents.agent_loop.errors import ApiCallError
 from weather_agents.agent_loop.interfaces import ModelRequest
+from weather_agents.agent_loop.models import Answer
 from weather_agents.settings import Settings
 
 __all__ = ["ANSWER_SCHEMA", "FAST_MODE_BETA", "AnthropicModelCaller"]

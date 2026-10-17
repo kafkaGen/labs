@@ -1,5 +1,6 @@
 """Fakes and builders for the agent loop and runtime tests."""
 
+import asyncio
 import json
 from typing import cast
 
@@ -14,6 +15,7 @@ from anthropic.types import (
     Usage,
 )
 
+from weather_agents.agent_loop import ModelRequest, ToolOutcome, ToolSpec
 from weather_agents.settings import Settings
 
 FORECAST = "open-meteo__forecast"
@@ -63,3 +65,55 @@ def answer_reply(
 def content_of(message: MessageParam) -> list[dict[str, object]]:
     """A message's content blocks as plain dicts, for assertions."""
     return cast(list[dict[str, object]], message["content"])
+
+
+class FakeModelCaller:
+    """Returns scripted replies in order, or raises the scripted exception, and records requests."""
+
+    def __init__(self, *replies: Message | Exception) -> None:
+        self._replies = list(replies)
+        self.requests: list[ModelRequest] = []
+
+    async def call(self, request: ModelRequest) -> Message:
+        self.requests.append(request)
+        next_reply = self._replies.pop(0)
+        if isinstance(next_reply, Exception):
+            raise next_reply
+        return next_reply
+
+
+class FakeToolProvider:
+    """Returns scripted outcomes by tool name.
+
+    With `barrier=n`, each call waits until n calls are in flight at once, and gives up after two
+    seconds. Calls made one after another never get there, so they time out.
+    """
+
+    def __init__(
+        self, outcomes: dict[str, ToolOutcome | Exception] | None = None, *, barrier: int = 0
+    ) -> None:
+        self.outcomes = outcomes or {}
+        self.calls: list[tuple[str, dict[str, object]]] = []
+        self._barrier = barrier
+        self._arrived = 0
+        self._all_arrived = asyncio.Event()
+
+    async def list_tools(self) -> list[ToolSpec]:
+        schema: dict[str, object] = {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        }
+        return [ToolSpec(name=name, description=name, input_schema=schema) for name in self.outcomes]
+
+    async def call(self, name: str, arguments: dict[str, object]) -> ToolOutcome:
+        self.calls.append((name, arguments))
+        if self._barrier:
+            self._arrived += 1
+            if self._arrived >= self._barrier:
+                self._all_arrived.set()
+            await asyncio.wait_for(self._all_arrived.wait(), timeout=2)
+        outcome = self.outcomes.get(name, ToolOutcome(content=f"{name} ok"))
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome

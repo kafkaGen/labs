@@ -22,10 +22,12 @@ from weather_agents.agent_loop.interfaces import (
     ToolSpec,
 )
 from weather_agents.agent_loop.ledger import SourceLedger
+from weather_agents.agent_loop.model import AnthropicModelCaller
 from weather_agents.agent_loop.result import RunResult, TokenUsage
 
 __all__ = [
     "Answer",
+    "AnthropicModelCaller",
     "ApiCallError",
     "Event",
     "InvalidAnswerError",

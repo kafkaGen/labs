@@ -1279,8 +1279,14 @@ class FakeToolProvider:
         self._all_arrived = asyncio.Event()
 
     async def list_tools(self) -> list[ToolSpec]:
-        schema: dict[str, object] = {"type": "object", "properties": {}, "additionalProperties": False}
-        return [ToolSpec(name=name, description=name, input_schema=schema) for name in self.outcomes]
+        schema: dict[str, object] = {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        }
+        return [
+            ToolSpec(name=name, description=name, input_schema=schema) for name in self.outcomes
+        ]
 
     async def call(self, name: str, arguments: dict[str, object]) -> ToolOutcome:
         self.calls.append((name, arguments))
@@ -1432,7 +1438,11 @@ async def test_thinking_and_tool_use_blocks_go_back_unchanged():
     )
     await run(caller, FakeToolProvider({FORECAST: ToolOutcome(content="21")}))
     assistant = content_of(caller.requests[1].messages[1])
-    assert assistant[0] == {"type": "thinking", "thinking": "Need the forecast.", "signature": "sig-1"}
+    assert assistant[0] == {
+        "type": "thinking",
+        "thinking": "Need the forecast.",
+        "signature": "sig-1",
+    }
     assert assistant[1] == {"type": "tool_use", "id": "t1", "name": FORECAST, "input": BERLIN}
 
 
@@ -1609,7 +1619,9 @@ async def run_agent(
     while True:
         step += 1
         log.debug("model call", step=step, input=truncate(added, limit))
-        request = ModelRequest(system=agent.system_prompt, messages=list(messages), tools=tool_specs)
+        request = ModelRequest(
+            system=agent.system_prompt, messages=list(messages), tools=tool_specs
+        )
         try:
             message = await caller.call(request)
         except RunError as error:
@@ -1689,7 +1701,9 @@ async def _run_tool(
         outcome = await tools.call(block.name, block.input)
     # Any exception: one failing call must not cancel its siblings in the task group.
     except Exception as error:
-        outcome = ToolOutcome(content=f"the tool raised {type(error).__name__}: {error}", is_error=True)
+        outcome = ToolOutcome(
+            content=f"the tool raised {type(error).__name__}: {error}", is_error=True
+        )
     log.debug(
         "tool result",
         tool=block.name,
@@ -1824,7 +1838,9 @@ class FakePool:
         self, name: str, arguments: dict[str, object] | None = None
     ) -> CallToolResult:
         self.calls.append((name, arguments))
-        result = self.results.get(name, CallToolResult(content=[TextContent(type="text", text="ok")]))
+        result = self.results.get(
+            name, CallToolResult(content=[TextContent(type="text", text="ok")])
+        )
         if isinstance(result, Exception):
             raise result
         return result
@@ -1892,7 +1908,9 @@ async def test_the_real_servers_schemas_come_out_strict(client):
     assert len(specs) == 11
     for spec in specs:
         assert not keys_in(spec.input_schema) & STRICT_FORBIDDEN, spec.name
-        assert all(o["additionalProperties"] is False for o in objects_in(spec.input_schema)), spec.name
+        assert all(o["additionalProperties"] is False for o in objects_in(spec.input_schema)), (
+            spec.name
+        )
         assert spec.input_schema.get("required") == original[spec.name.removeprefix(PREFIX)].get(
             "required"
         )
@@ -2097,7 +2115,9 @@ pytestmark = pytest.mark.anyio
 
 
 def runtime(caller, pool=None) -> ApiRuntime:
-    return ApiRuntime(make_settings(), model_caller=caller, pool=pool if pool is not None else FakePool())
+    return ApiRuntime(
+        make_settings(), model_caller=caller, pool=pool if pool is not None else FakePool()
+    )
 
 
 async def test_a_question_without_a_session_id_starts_a_session():
@@ -2155,13 +2175,18 @@ async def test_a_failed_request_leaves_the_question_and_the_error_in_the_session
         await rt.send("Try again?", caught.value.session_id)
     assert caller.requests[2].messages == [
         {"role": "user", "content": "Weather in Berlin?"},
-        {"role": "assistant", "content": "The previous request failed: the model stopped with 'refusal'"},
+        {
+            "role": "assistant",
+            "content": "The previous request failed: the model stopped with 'refusal'",
+        },
         {"role": "user", "content": "Try again?"},
     ]
 
 
 async def test_a_tool_call_reaches_the_pool_by_its_prefixed_name():
-    pool = FakePool(results={FORECAST: CallToolResult(content=[TextContent(type="text", text="21")])})
+    pool = FakePool(
+        results={FORECAST: CallToolResult(content=[TextContent(type="text", text="21")])}
+    )
     caller = FakeModelCaller(
         reply(tool_use("t1", FORECAST, BERLIN), stop_reason="tool_use"), answer_reply()
     )
@@ -2349,7 +2374,9 @@ class ApiRuntime:
             self._client = AsyncAnthropic(api_key=settings.anthropic_api_key.get_secret_value())
             model_caller = AnthropicModelCaller(self._client, settings)
         self._caller = model_caller
-        self._pool: ToolPool = pool if pool is not None else McpClientPool.from_file(settings.mcp_config)
+        self._pool: ToolPool = (
+            pool if pool is not None else McpClientPool.from_file(settings.mcp_config)
+        )
         self._tools = McpToolProvider(self._pool)
         self._agent = agent
         self._tool_specs: list[ToolSpec] = []
@@ -2546,7 +2573,9 @@ def log_lines(tmp_path):
 
         def read():
             paths = sorted(tmp_path.glob("weather_agents/*/main.jsonl"))
-            return [json.loads(line) for path in paths for line in path.read_text().splitlines() if line]
+            return [
+                json.loads(line) for path in paths for line in path.read_text().splitlines() if line
+            ]
 
         yield read
 
@@ -2562,7 +2591,9 @@ def tool_turn_then_answer(**answer):
 
 
 async def test_every_line_of_a_run_names_its_session(log_lines):
-    async with ApiRuntime(make_settings(), model_caller=tool_turn_then_answer(), pool=FakePool()) as rt:
+    async with ApiRuntime(
+        make_settings(), model_caller=tool_turn_then_answer(), pool=FakePool()
+    ) as rt:
         result = await rt.send("Weather in Berlin?")
     run_lines = [line for line in log_lines() if line["event"] in RUN_EVENTS]
     assert len(run_lines) == 7
@@ -2570,7 +2601,9 @@ async def test_every_line_of_a_run_names_its_session(log_lines):
 
 
 async def test_debug_lines_carry_each_step_cut_to_the_truncation_length(log_lines):
-    pool = FakePool(results={FORECAST: CallToolResult(content=[TextContent(type="text", text="x" * 100)])})
+    pool = FakePool(
+        results={FORECAST: CallToolResult(content=[TextContent(type="text", text="x" * 100)])}
+    )
     settings = make_settings(log_truncate=20)
     async with ApiRuntime(settings, model_caller=tool_turn_then_answer(), pool=pool) as rt:
         await rt.send("Weather in Berlin, please, as soon as you can?")
@@ -2593,7 +2626,9 @@ async def test_debug_lines_carry_each_step_cut_to_the_truncation_length(log_line
 
 
 async def test_the_end_of_a_run_logs_a_summary_at_info(log_lines):
-    async with ApiRuntime(make_settings(), model_caller=tool_turn_then_answer(), pool=FakePool()) as rt:
+    async with ApiRuntime(
+        make_settings(), model_caller=tool_turn_then_answer(), pool=FakePool()
+    ) as rt:
         await rt.send("Weather in Berlin?")
     (summary,) = named(log_lines(), "run finished")
     assert summary["level"] == "info"
@@ -2729,7 +2764,9 @@ def show(result: RunResult) -> None:
     print(f"\n[{result.session_id}] {result.answer.answer}")
     for resource in result.answer.resources:
         print(f"  - {resource.title}: {resource.model_dump_json()}")
-    print(f"  turns={result.turns} tool_calls={result.tool_calls} tokens={result.usage.model_dump()}")
+    print(
+        f"  turns={result.turns} tool_calls={result.tool_calls} tokens={result.usage.model_dump()}"
+    )
 
 
 async def main() -> None:

@@ -104,7 +104,9 @@ class FakeToolProvider:
             "properties": {},
             "additionalProperties": False,
         }
-        return [ToolSpec(name=name, description=name, input_schema=schema) for name in self.outcomes]
+        return [
+            ToolSpec(name=name, description=name, input_schema=schema) for name in self.outcomes
+        ]
 
     async def call(self, name: str, arguments: dict[str, object]) -> ToolOutcome:
         self.calls.append((name, arguments))

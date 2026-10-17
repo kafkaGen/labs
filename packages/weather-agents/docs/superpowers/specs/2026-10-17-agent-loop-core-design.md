@@ -94,11 +94,13 @@ class UrlResource(BaseModel):
     url: str
     title: str
 
+
 class ToolCallResource(BaseModel):
     kind: Literal["tool_call"]
-    tool: str        # the prefixed name, as the model called it
-    arguments: str   # JSON text: strict mode forbids a free-form object
+    tool: str  # the prefixed name, as the model called it
+    arguments: str  # JSON text: strict mode forbids a free-form object
     title: str
+
 
 class Answer(BaseModel):
     answer: str

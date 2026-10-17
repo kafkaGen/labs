@@ -1,6 +1,6 @@
 # PRD: API agent loop
 
-**Status:** Draft
+**Status:** Building
 **In one line:** A hand-written agent loop on the Claude Messages API, wrapped as the API runtime, that answers questions in in-memory sessions with our MCP tools and Anthropic's own tools, inside a deadline and a USD cap per request, and returns a structured answer with its sources.
 **Serves:** "the agent layer implemented twice, once on the Claude API" from the goal in [`../vision.md`](../vision.md), and the in-scope line on two interchangeable agent runtimes.
 

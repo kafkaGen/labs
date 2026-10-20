@@ -29,7 +29,7 @@ Then warn the human about anything still missing. Put the warning above the prom
 
 - the job needs data or actions the model has no tool for,
 - a mechanical step still has no tool or script, or
-- the request is too vague to write rules for, because it has no audience, no output shape, or no way to tell a good result from a bad one.
+- the request is too vague to write rules for, because it has no goal, no audience, no output shape, or no way to tell a good result from a bad one.
 
 Each warning says what is missing, what goes wrong without it (invented data, wrong counts, an unpredictable format), and which tool or input would fix it. Then write the best prompt the current setup allows, unless the human needs to answer a question first.
 
@@ -41,7 +41,7 @@ These four core blocks belong in almost every prompt:
 
 | Block | What goes in it |
 |---|---|
-| `<role>` | One or two sentences: who the model is and what its task is. This is the first thing the model reads. |
+| `<role>` | Two or three sentences: who the model is, what its task is, and the goal the task serves. This is the first thing the model reads. |
 | `<instructions>` | What to do. Use numbered steps only when the order matters. |
 | `<rules>` | Hard limits. Each rule is something the output either obeys or breaks. |
 | `<quality_criteria>` | What a good result looks like. The model checks its output against these before answering. |
@@ -81,7 +81,8 @@ Triage the ticket above.
 
 Use this test: a smart new colleague with no background on the project reads the prompt. Could they do the job without asking you anything? If they would be confused, the model will be too.
 
-- **State the task first, in plain words.** The opening line of `<role>` says what the job is: "You triage support tickets for a SaaS product." One sentence of role is enough. A heavy persona, such as "a world-class expert who never makes mistakes", narrows the model without helping it.
+- **State the task first, in plain words.** The opening line of `<role>` says what the job is: "You triage support tickets for a SaaS product." One sentence of persona is enough. A heavy persona, such as "a world-class expert who never makes mistakes", narrows the model without helping it.
+- **Then state the goal the task serves.** The next sentence of `<role>` says what problem the output solves, who uses it, and what they do with it: "On-call engineers read your priority to decide what to fix first, so a real outage must never wait behind a billing typo." The task says what to do. The goal lets the model decide the cases your rules don't cover.
 - **Give instructions, not questions, and lead with action verbs:** write, list, classify, change. The verb decides what the model does. "Suggest changes" gets suggestions back, and "change the function" gets edits.
 - **Be specific.** Use numbers, names, and limits. Write "at most three sentences", not "be concise".
 - **Say what to do, not only what to avoid.** "Write in plain paragraphs" works better than "don't use markdown".

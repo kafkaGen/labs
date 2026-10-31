@@ -11,9 +11,9 @@ dependencies = []
 
 [dependency-groups]
 dev = [
-    "pre-commit>=4.6.2",
-    "ruff>=0.16.7",
-    "ty>=0.0.80",
+    "pre-commit>=4.7.0",
+    "ruff>=0.17.2",
+    "ty>=0.0.91",
 ]
 
 [tool.uv]

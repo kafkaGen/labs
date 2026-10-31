@@ -5,7 +5,7 @@ description = "Shared structured logging for Python applications."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "platformdirs>=4",
+    "platformdirs>=4.13.5",
     "pydantic>=2",
     "structlog>=24,<25",
 ]

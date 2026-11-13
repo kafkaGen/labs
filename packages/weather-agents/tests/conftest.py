@@ -26,3 +26,6 @@ async def client(fake: FakeOpenMeteo) -> AsyncIterator[Client]:
     server = create_server(transport=httpx.MockTransport(fake), today=lambda: TODAY)
     async with Client(server) as connected:
         yield connected
+
+
+pytest_plugins = ["tests.logs"]

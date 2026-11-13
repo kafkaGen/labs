@@ -4,8 +4,11 @@ version = "0.1.0"
 description = "Open-Meteo MCP server and weather chat CLI, a study rig for the Anthropic stack."
 requires-python = ">=3.12"
 dependencies = [
+    "anthropic>=2.8,<3",
     "httpx>=0.28",
+    "labs-logging",
     "mcp[cli]>=2,<3",
+    "pydantic-settings>=2.16,<3",
 ]
 
 [dependency-groups]
@@ -23,5 +26,8 @@ build-backend = "uv_build"
 testpaths = ["tests"]
 addopts = "-m 'not live'"
 markers = [
-    "live: calls the real Open-Meteo API",
+    "live: calls the real Open-Meteo API or the real Anthropic API",
 ]
+
+[tool.uv.sources]
+labs-logging = { workspace = true }

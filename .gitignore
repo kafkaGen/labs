@@ -221,3 +221,6 @@ __marimo__/
 
 # Project specific files
 tmp/
+
+# Git worktrees
+.worktrees/

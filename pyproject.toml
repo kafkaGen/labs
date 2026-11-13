@@ -51,3 +51,5 @@ select = [
 
 [tool.ty.environment]
 python-version = "3.12"
+# Package roots, so test modules resolve their `tests.*` imports as pytest does.
+extra-paths = ["packages/weather-agents"]

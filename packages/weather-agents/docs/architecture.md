@@ -76,12 +76,12 @@ Inside the CLI process, these modules hold the boundaries. They are enforced by 
 | Module | Owns | Status |
 |---|---|---|
 | `cli` | Click commands, Textual app, rendering of streamed text, tool calls, progress, and logs; the elicitation modal | Planned |
-| `runtimes` | The `AgentRuntime` interface (send a message and stream events back, clear, close) and its two implementations. The CLI depends only on the interface | Planned |
-| `agent_loop` | The API runtime's loop: call the model, run tool calls, append results, repeat. Stops on `end_turn`, on the per-message USD cap, on the per-message deadline, or on an error. Depends on a tool-provider interface, not on MCP | Planned |
+| `runtimes` | The `AgentRuntime` interface (send a message and stream events back, clear, close) and its two implementations. The CLI depends only on the interface | Built for the API runtime's walking skeleton: `ApiRuntime` opens every server in the MCP config on entry, `send` answers one question and returns the answer text with a new session id, and `close` shuts the MCP sessions and the API client. Planned: the `AgentRuntime` interface itself, streamed events, `clear`, continuing a session, and the SDK runtime |
+| `agent_loop` | The API runtime's loop: call the model, run tool calls, append results, repeat. Stops on `end_turn`, on the per-message USD cap, on the per-message deadline, or on an error. Depends on a tool-provider interface, not on MCP | Built: calls the model with automatic 5-minute prompt caching, runs every tool call of one model turn concurrently, sends all their results back in one message, and returns the final text on `end_turn`. Any other stop reason, an API call that fails after the SDK's retries, or a tool call that raises ends the run with one `RunError`, logged once. A tool's own error result goes back to the model. Planned: the USD cap, the deadline, streaming, and the remaining stop reasons |
 | `mcp_client` | A weather-agnostic MCP client: opens one session per configured server from an `mcpServers` file, keeps it open for the chat, lists and calls tools, reads resources, gets prompts. Its sampling, elicitation, progress, and log handlers are injected by its caller | Built for level 1 over stdio: one session per server, calls routed by server name, tools listed for a model as `<server>__<tool>` and called by that name, a server that fails to open recorded while the others still open, and every error naming its server. Planned: the sampling, elicitation, progress, and log handlers, and HTTP entries |
-| `agents` | Orchestrator and specialist definitions: system prompts, tool allowlists, model. Read by both runtimes, so neither owns a prompt ([ADR-0001](adr/0001-two-agent-runtimes-over-one-tool-layer.md)) | Planned |
+| `agents` | Orchestrator and specialist definitions: system prompts, tool allowlists, model. Read by both runtimes, so neither owns a prompt ([ADR-0004](adr/0004-anthropic-server-tools-only-on-the-api-runtime.md)) | Built: one system prompt for the single weather agent. Planned: the orchestrator, the specialists, and their tool allowlists |
 | `server` | The MCP server. Split inside into an `openmeteo` layer that knows HTTP and response shapes and nothing about MCP, and the MCP tools, resources, and prompts built on it. Never imported by the CLI side | Built |
-| `settings` | One pydantic-settings object: defaults in code, overridden by `.env` and the environment, then by Click flags for one run | Planned |
+| `settings` | One pydantic-settings object: defaults in code, overridden by `.env` and the environment, then by Click flags for one run | Built: the model (Claude Haiku 5.5 by default), `max_tokens`, the MCP config file, and the API key. Fields read `WEATHER_AGENTS_<FIELD>`, the key reads `ANTHROPIC_API_KEY`, `.env` is the nearest one up from the current directory, and a bad value fails at load naming the field and never its value. Planned: the Click flags, and each later knob |
 
 Coupling the diagram does not show: the CLI and the server ship as one uv package, `weather-agents`, and share a release. Both runtimes and the sampling handler use the one `ANTHROPIC_API_KEY`.
 
@@ -168,7 +168,7 @@ The SDK runtime enforces the deadline itself, with an `asyncio` timeout that cal
 | `weather-agents serve` | CLI command | `--port`, `--stateless` | Me | Planned |
 | `mcp.stdio.json`, `mcp.http.json` | Config files | Claude Code's `mcpServers` format. The stdio file has `command` and `args`. The HTTP file has `type: "http"`, `url`, and `headers` with a `${WEATHER_MCP_TOKEN}` placeholder. Both runtimes read the same file unchanged | `mcp_client`, Claude Code binary | Built for `mcp.stdio.json`, which has one `open-meteo` entry that `mcp_client` reads. Planned: `mcp.http.json`, and the Claude Code binary reading either file |
 | MCP server surface | MCP | Tools, resources with a template and completion, and prompts, as listed in [`open-meteo-mcp-scope.md`](open-meteo-mcp-scope.md). Tools return structured content | Any MCP client | Built for level 1. Planned for level 2 |
-| `.env` | Environment | `ANTHROPIC_API_KEY`, `WEATHER_MCP_TOKEN`, and any setting overrides | `settings`, the `${...}` expansion in config files | Planned |
+| `.env` | Environment | `ANTHROPIC_API_KEY`, `WEATHER_MCP_TOKEN`, and any setting overrides | `settings`, the `${...}` expansion in config files | Built for `ANTHROPIC_API_KEY` and setting overrides, read by `settings`. Planned: `WEATHER_MCP_TOKEN` and the `${...}` expansion |
 
 ## Data stores
 
@@ -185,14 +185,14 @@ The model's history and the on-screen transcript are separate. The runtime owns 
 
 | Dependency | Used for | When it is down | Status |
 |---|---|---|---|
-| Anthropic API | All model calls | The message fails, the error shows in the chat, and the conversation stays usable for the next message | Planned |
+| Anthropic API | All model calls | The message fails, the error shows in the chat, and the conversation stays usable for the next message | Built for the runtime: `send` raises a `RunError` and the next `send` works. Planned: the chat |
 | Open-Meteo APIs | All weather data | The tool returns an error result the model can read. In the dossier, the other sources still return and a log notification names the missing one | Planned |
 
 ## Deployment and runtime
 
 Nothing is deployed. Everything runs on my machine from the uv workspace.
 
-- **The server alone (Built):** `python -m weather_agents.server` runs it over stdio. `make inspect` in `packages/weather-agents` opens it in MCP Inspector and needs `npx`. `make test` runs the offline tests. `make test-live` calls the real Open-Meteo.
+- **The server alone (Built):** `python -m weather_agents.server` runs it over stdio. `make inspect` in `packages/weather-agents` opens it in MCP Inspector and needs `npx`. `make test` runs the offline tests. `make test-live` calls the real Open-Meteo and, for the API runtime's live test, the real Claude API.
 - **stdio (Planned):** `uv run weather-agents chat --runtime api|sdk --mcp-config mcp.stdio.json`. One terminal. The MCP client in use spawns the server as its child.
 - **HTTP (Planned):** `uv run weather-agents serve [--stateless]` in one terminal, then `chat --mcp-config mcp.http.json` in another.
 - **Needs:** `.env` with `ANTHROPIC_API_KEY`, and `WEATHER_MCP_TOKEN` once HTTP auth exists. Network access to Anthropic and Open-Meteo. No Node; the SDK bundles its binary.
@@ -202,14 +202,14 @@ Nothing is deployed. Everything runs on my machine from the uv workspace.
 | Concern | How it works here | Status |
 |---|---|---|
 | Authentication and authorization | A static bearer token on the HTTP transport. The server rejects requests without it, and both clients send it from the expanded `headers`. stdio has none: whoever can spawn the process owns it | Planned |
-| Configuration and secrets | pydantic-settings reads defaults, then `.env` and the environment, then Click flags. MCP connection details live only in the two config files. Secrets live only in `.env` | Planned |
+| Configuration and secrets | pydantic-settings reads defaults, then `.env` and the environment, then Click flags. MCP connection details live only in the two config files. Secrets live only in `.env` | Built for `settings`, with overrides passed by the caller in place of Click flags. Planned: the Click flags |
 | Logging and observability | MCP log and progress notifications render live in the chat (API runtime). The server's Python logging goes to `.logs/mcp-server.log`, never to stderr, because a stdio child's stderr would draw over the Textual screen. Each message shows its cost when it finishes | Planned |
-| Error handling and retries | No retries anywhere. Open-Meteo errors become tool error results, and each Open-Meteo call has a 30 second timeout. The loop turns a hit cap or deadline into a visible stop reason, not an exception | Built for the server. Planned for the loop |
+| Error handling and retries | Only calls to the Anthropic API retry, through the SDK's default of 2 retries. MCP tool calls and Open-Meteo never retry. Open-Meteo errors become tool error results, and each Open-Meteo call has a 30 second timeout. The loop ends every failed run with one `RunError` the caller can catch | Built for the server, and for the loop's stop reasons, API failures, and raising tool calls. Planned: the cap and the deadline as run errors, and retry settings |
 | Graceful degradation | When a session has no back channel (stateless HTTP, the 2026 protocol, or the Claude Code client), the server catches the failed sampling or elicitation request and takes the fallback path from the scope doc instead of erroring | Planned |
 
 ## Scale and reliability
 
-- **Throughput:** one user. The loop runs tool calls from one model turn in order unless parallel execution is added. One question is bounded by its USD cap and its deadline, both settings.
+- **Throughput:** one user. The loop runs the tool calls of one model turn concurrently. One question is bounded by its USD cap and its deadline, both settings.
 - **Failure behaviour:** if a stdio server child dies, the MCP session fails, the current tool call surfaces as an error, and the rest of the chat has no tools until restart. If the `serve` process dies, HTTP calls fail the same way. If the CLI crashes or exits, the conversation is lost by design.
 - **Recovery:** manual. Restart the CLI, or restart `serve` and then the CLI.
 

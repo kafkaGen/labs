@@ -1374,7 +1374,7 @@ dev = [
 requires-dist = [
     { name = "anthropic", specifier = ">=2.8.0" },
     { name = "httpx", specifier = ">=0.28" },
-    { name = "mcp", extras = ["cli"], specifier = ">=2,<3" },
+    { name = "mcp", extras = ["cli"], specifier = ">=2.3.0,<3" },
     { name = "pydantic-settings", specifier = ">=2.16.3" },
 ]
 

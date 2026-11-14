@@ -221,3 +221,9 @@ __marimo__/
 
 # Project specific files
 tmp/
+
+# macOS
+.DS_Store
+
+# Git worktrees
+.worktrees/

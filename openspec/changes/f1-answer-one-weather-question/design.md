@@ -56,8 +56,10 @@ The architecture's `AgentRuntime` protocol is not written yet. It would have one
 
 ```python
 class ToolProvider(Protocol):
-    async def list_tools(self) -> list[ToolSpec]: ...                     # name, description, input_schema
-    async def call(self, name: str, arguments: dict[str, object]) -> ToolOutcome: ...  # text, is_error
+    async def list_tools(self) -> list[ToolSpec]: ...  # name, description, input_schema
+    async def call(
+        self, name: str, arguments: dict[str, object]
+    ) -> ToolOutcome: ...  # text, is_error
 ```
 
 `McpToolProvider` maps `list_all_tools()` to `ToolSpec`s and `call_namespaced_tool()` to `ToolOutcome`. It turns a `CallToolResult` into text: `structured_content` serialized as JSON when present, otherwise the text content blocks joined with newlines. `is_error` passes through. It does not catch `McpClientError`; the loop wraps any exception from `call` in a `RunError` (decision 4). F4 changes that to an error result.
@@ -104,8 +106,8 @@ Alternative: `asyncio.gather`. Rejected because it leaves siblings running when 
 
 ```python
 class RunError(Exception):
-    stop_reason: str | None   # set when the model stopped for a reason other than end_turn
-    tool: str | None          # set when a tool call raised
+    stop_reason: str | None  # set when the model stopped for a reason other than end_turn
+    tool: str | None  # set when a tool call raised
     # __cause__ holds the API or tool exception
 ```
 

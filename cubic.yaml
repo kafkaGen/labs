@@ -2,6 +2,8 @@
 version: 1
 
 reviews:
+  # No automatic reviews. Comment `@cubic-dev-ai review this PR` to request one.
+  enabled: false
   # PRs from outside the repo wait for a manual `@cubic-dev-ai review`.
   external_contributors_require_manual_review: true
   ignore:

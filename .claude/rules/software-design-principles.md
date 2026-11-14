@@ -1,0 +1,21 @@
+# Software Design Principles
+
+Keep every design decision and piece of code inside these principles.
+
+- **SoC** (Separation of Concerns) means one module, one reason to change. Don't let a file mix I/O, business rules, and persistence. SOLID's SRP applies this to a single class.
+- **KISS** (Keep It Simple) means picking the simplest solution that solves the actual problem. Skip cleverness and unneeded layers.
+- **YAGNI** (You Aren't Gonna Need It) means building for the requirement in front of you, not the one you imagine. Skip speculative abstraction, config, or hooks nobody asked for.
+- **DRY** (Don't Repeat Yourself) means not duplicating the same *knowledge* or *logic* in two places. Similar-looking code that represents unrelated concerns can stay separate.
+- **SOLID** guides class and module design under real change pressure:
+  - **S**ingle Responsibility: give each unit one reason to change.
+  - **O**pen/Closed: extend behavior without editing stable code.
+  - **L**iskov Substitution: a subtype must work anywhere its base type is expected.
+  - **I**nterface Segregation: don't force callers to depend on methods they don't use.
+  - **D**ependency Inversion: depend on abstractions, not concrete implementations, at integration seams.
+
+## When principles conflict
+
+- Default to YAGNI and KISS. Escalate to SOLID only when real change pressure shows up: a second use case, a growing class, or a seam that's hard to test. Don't pre-apply SOLID to code that has none yet.
+- DRY yields to KISS or SOLID when removing duplication would force unrelated things to share one abstraction. Two similar blocks beat one wrong shared one.
+- If a violation is unavoidable, prefer the one that does the least damage: `DRY < KISS < ISP < SRP < YAGNI < LSP`. Duplication is cheap to fix later; a broken Liskov substitution causes runtime bugs. This order is a tie-breaker, not an excuse.
+- When deliberately departing from a principle, note why in one line at the decision point (comment, commit body, or PR body).

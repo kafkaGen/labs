@@ -1,0 +1,94 @@
+---
+paths:
+  - "**/*.py"
+  - "**/pyproject.toml"
+---
+
+# Python Conventions
+
+## Tooling
+
+- Use `uv` and `pyproject.toml` for the environment, dependencies, and project config. Don't use `pip` or `requirements.txt`.
+- Ruff lints and formats the code. `ty` type-checks it. pytest runs the tests.
+- Pre-commit hooks run Ruff, ty, and pytest before every commit. Don't bypass them with `--no-verify`.
+- Run every command through `uv run` (`uv run pytest`, `uv run ruff check`). Never call a bare `python` or `pip`.
+- Change dependencies with `uv add` or `uv remove`. Don't hand-edit the dependency list in `pyproject.toml`.
+
+## Style
+
+- Use f-strings for human-facing strings, never `%` or `.format()`. Logging is the one exception, see Resources & Logging.
+- Use `pathlib.Path`, never `os.path`.
+- Name variables, functions, and modules in `snake_case`. Name classes in `PascalCase`. Name module-level constants in `SCREAMING_SNAKE_CASE`.
+- Prefix internal-only names with a leading `_` (`_helper`) and leave them out of `__all__`.
+- Name boolean-returning functions like predicates: `is_valid`, `has_error`, `can_proceed`.
+- Never give a function a mutable default argument:
+
+```python
+def add_item(item: str, items: list[str] | None = None) -> list[str]:
+    items = items if items is not None else []
+    ...
+```
+
+- Use an `Enum` for a fixed set of values, not raw strings or ints.
+- Type-hint every parameter and the return. Write `-> None` explicitly when a function returns nothing.
+- Let Ruff handle formatting (line length, quotes, spacing). Don't hand-wrap lines to "fix" it.
+
+## Imports
+
+- Use absolute imports across the project. Use relative imports only within a subpackage.
+- Group imports as stdlib, then third-party, then local, with one blank line between groups. Ruff's `I` rules sort and enforce this, so don't fight the formatter.
+- Every public module declares `__all__` listing what it exports.
+- Break a circular import with `if TYPE_CHECKING:`, not by moving the import to runtime:
+
+```python
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models import User
+```
+
+## Types
+
+- Use modern built-in generics, not the `typing` equivalents: `list[str]` not `List[str]`, `dict[str, int]` not `Dict[str, int]`, `str | None` not `Optional[str]`.
+- Avoid `Any`. Use `object` and narrow it, or define a `Protocol`, instead of silencing the checker with `Any`.
+- Suppress a false positive with a scoped comment, not a bare ignore: `value = f()  # ty: ignore[invalid-return-type]`.
+- To silence a rule project-wide, set it once in `pyproject.toml` instead of adding a comment on every line:
+
+```toml
+[tool.ty.rules]
+unresolved-import = "ignore"
+```
+
+## Pydantic v2
+
+- Use Pydantic models, not dataclasses, for structured data.
+- Use `@model_validator` and `@field_validator`, not the deprecated v1 `@validator`.
+- Use `Annotated[Type, Field(...)]` for constraints and metadata instead of a bare `field: Type = Field(...)`. It's reusable, and it doesn't disguise a required field as one with a default.
+- Exception: a literal default still needs a plain `= value`. Type checkers don't read `default` or `alias` from inside `Annotated`.
+- Set `model_config = ConfigDict(...)` as a class attribute, not an inner `class Config`.
+- Use `BaseSettings` (`pydantic-settings`) for env vars and app settings. Never parse `os.environ` by hand.
+
+## Resources & Logging
+
+- Use `with` for files, locks, connections, and anything else that needs cleanup. Never open and close a resource by hand.
+- Use `logging.getLogger(__name__)` instead of `print` for anything beyond a CLI's user-facing output.
+- Pass lazy `%`-args to log calls, not f-strings: `logger.info("failed: %s", err)`. That way the message isn't built when the level is filtered out.
+
+## Errors
+
+- Never use a bare `except:`. The minimum is `except Exception:`.
+- Define a custom exception per error case. Catch the specific one, not the base class, wherever the caller can act on it.
+- Exceptions signal errors, not control flow.
+- Prefer EAFP (try/except) over LBYL pre-checks. Don't check-then-act when the exception path already handles it.
+
+## Docstrings
+
+- Write Google-style docstrings (`Args:` / `Returns:` / `Raises:`) for every public module, class, and function.
+- Document what's non-obvious. Don't restate a name or type the signature already shows.
+- Skip docstrings for `_internal` names. A short comment after the `def` line is enough if the intent isn't obvious.
+
+## Comments
+
+- Explain why, not what. The code should read itself.
+- Add a comment only when a decision, trade-off, or non-obvious dependency isn't clear from the code.
+- Keep it short.

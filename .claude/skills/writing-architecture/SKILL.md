@@ -20,7 +20,7 @@ One architecture, present tense. An alternative that lost belongs in an ADR, not
 
 ## Design mode
 
-1. **Orient.** Read `docs/vision.md` for the problem, users, scope, and constraints, the PRDs under `docs/prd/` for what the system has to do, and `docs/adr/` for what is already settled. If code exists, read it first using the list below. Never ask for something you can read yourself.
+1. **Orient.** Read `docs/vision.md` for the problem, users, scope, and constraints, the backlogs under `docs/backlog/` for what the system has to do, and `docs/adr/` for what is already settled. If code exists, read it first using the list below. Never ask for something you can read yourself.
 
 2. **Propose before asking.** Draft a whole shape and put it in front of the user: components, edges, stack. A wrong first proposal is faster to correct than twenty questions, and it gives them something to react to.
 
@@ -96,7 +96,7 @@ A store must not appear as both a data store and an external dependency.
 
 - **History.** No "we used to", no changelog, no migration notes. Current shape only.
 - **A schedule.** Planned marks intended structure, not a roadmap. "A worker process owns the queue" is shape whether or not it exists yet. "Add the worker in Q3" is a plan and belongs in a PRD or a spec.
-- **Requirements.** What the system *must* do, its acceptance and success criteria, belong to the PRD. This file says what it *does*.
+- **Requirements.** What the system *must* do belongs to the backlog, and acceptance criteria to each feature's spec. This file says what it *does*.
 - **Product intent.** Goals, scope, and product non-goals belong to `docs/vision.md`.
 - **Why a decision was made.** That belongs to an ADR in `docs/adr/`. Link the ADR inline on the line it explains; never summarize it here and never add an ADR list.
 - **Per-class detail.** Components are runnable or deployable units, not classes, functions, or files.

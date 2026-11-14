@@ -1,6 +1,6 @@
 ---
 name: writing-vision
-description: Use when the user asks to write, draft, redo, or change a project vision or intent doc, or points at docs/vision.md; also when a project's problem, scope, or definition of success is unsettled and a PRD or architecture doc is about to be written on top of it.
+description: Use when the user asks to write, draft, redo, or change a project vision or intent doc, or points at docs/vision.md; also when a project's problem, scope, or definition of success is unsettled and a backlog or architecture doc is about to be written on top of it.
 disable-model-invocation: true
 ---
 
@@ -8,9 +8,11 @@ disable-model-invocation: true
 
 ## What a vision is
 
-The vision states a project's intent: the problem, the goal, who it is for, what is in and out, and how you would know it worked. It sits at the top of the doc stack. A PRD takes one goal from it; specs break a PRD down.
+The vision states a project's intent: the problem, the goal, who it is for, what is in and out, and how you would know it worked. It sits at the top of the doc stack. A backlog takes one area of it and lists the features that area needs; each feature becomes one spec.
 
-It is not a plan, an architecture, or a feature list. One page. If a section needs more than a short paragraph or a handful of bullets, that detail belongs in a PRD.
+It is not a plan, an architecture, or a feature list. One page. If a section needs more than a short paragraph or a handful of bullets, that detail belongs in a backlog.
+
+The vision is the only place that says why the project exists, what it builds, and where its scope ends. Backlogs inherit those answers and never restate them, so state them here in full.
 
 ## Which mode you are in
 
@@ -59,4 +61,4 @@ These sections collapse into each other if you let them.
 
 - Tech stack, components, hosting: `docs/architecture.md`.
 - A decision with a real trade-off behind it: an ADR under `docs/adr/`, via `writing-adrs`.
-- Feature-level requirements for one goal: a PRD under `docs/prd/`, via `writing-prds`.
+- The features one area needs, their status and their order: a backlog under `docs/backlog/`, via `writing-backlog`.
